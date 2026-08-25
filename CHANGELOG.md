@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file. The format foll
 - Format OMP, Pi, Claude Code, and Codex references through concrete harness adapters.
 - Focus the agent after successful text placement.
 - Health checks, Vim help, automated tests, and release tooling.
+- User guide, behavior reference, delivery diagram, and development documentation.
 
 ### Fixed
 

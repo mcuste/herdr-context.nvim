@@ -1,5 +1,6 @@
 local tests = {}
 local failures = 0
+local selection_fixture = vim.fn.getcwd() .. '/tests/fixtures/selection.md'
 
 local function test(name, body) table.insert(tests, { name = name, body = body }) end
 
@@ -124,7 +125,7 @@ test('does not treat a path prefix as a parent directory', function()
 end)
 
 test('normalizes an inclusive visual line range', function()
-  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fn.getcwd() .. '/README.md'))
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
   local buf = vim.api.nvim_get_current_buf()
   local selection = require('herdr-context.context').from_selection(buf, 'V', { 2, 0 }, { 1, 0 })
 
@@ -137,7 +138,7 @@ test('normalizes an inclusive visual line range', function()
 end)
 
 test('keeps partial single-line selection content', function()
-  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fn.getcwd() .. '/README.md'))
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
   local buf = vim.api.nvim_get_current_buf()
   local selection = require('herdr-context.context').from_selection(buf, 'v', { 1, 2 }, { 1, 6 })
 
@@ -147,7 +148,7 @@ test('keeps partial single-line selection content', function()
   assert_equal(selection.selection, 'herdr')
 end)
 test('keeps partial block selection content', function()
-  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fn.getcwd() .. '/README.md'))
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
   local buf = vim.api.nvim_get_current_buf()
   local selection = require('herdr-context.context').from_selection(buf, '\22', { 3, 0 }, { 4, 3 })
 
@@ -158,7 +159,7 @@ test('keeps partial block selection content', function()
 end)
 
 test('keeps modified partial content but rejects modified whole lines', function()
-  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fn.getcwd() .. '/README.md'))
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
   local buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_buf_set_lines(buf, 0, 1, false, { '# changed' })
 
