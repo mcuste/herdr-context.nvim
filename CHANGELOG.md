@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-08-25
+
 ### Added
 
 - Route a Neovim buffer or visual line range to an agent in the current tab or workspace.
