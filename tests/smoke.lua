@@ -1,5 +1,5 @@
 local root = vim.fn.getcwd()
-local log = root .. '/.herdr-context-smoke.log'
+local log = vim.fn.tempname()
 local text_log = log .. '.text'
 
 local function read_calls(count)
@@ -75,6 +75,22 @@ local function with_herdr_location(workspace_id, tab_id, body)
   vim.env.HERDR_TAB_ID = original_tab_id
   if not ok then error(err, 0) end
 end
+local function with_path(path, body)
+  local original = vim.env.PATH
+  vim.env.PATH = path
+  local ok, err = xpcall(body, debug.traceback)
+  vim.env.PATH = original
+  if not ok then error(err, 0) end
+end
+
+local function assert_health(scenario, expected_messages, expected_calls)
+  vim.env.HERDR_CONTEXT_TEST_SCENARIO = scenario
+  with_health_capture(function(messages)
+    require('herdr-context.health').check()
+    assert_equal(messages, expected_messages)
+  end)
+  assert_equal(read_calls(#expected_calls), expected_calls)
+end
 
 vim.fn.delete(log)
 vim.fn.delete(text_log)
@@ -85,6 +101,13 @@ vim.env.HERDR_TAB_ID = 'smoke-t'
 
 vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/README.md'))
 require('herdr-context').setup()
+with_notifications(function(notifications)
+  vim.api.nvim_buf_set_lines(0, 0, 1, false, { '# unsaved' })
+  vim.cmd('HerdrContextSendBuffer')
+  assert_equal(notifications[1].message, 'The current buffer has unsaved changes.')
+  assert_equal(vim.fn.filereadable(log), 0)
+  vim.cmd('edit!')
+end)
 
 vim.env.HERDR_CONTEXT_TEST_SCENARIO = 'single'
 vim.cmd('HerdrContextSendBuffer')
@@ -105,7 +128,6 @@ assert_equal(read_calls(3), {
   'agent|focus|smoke:p1|',
 })
 assert_equal(read_text(), ' @README.md#L1-1 \n\n```markdown\n# herdr\n```')
-
 local labels
 local original_select = vim.ui.select
 vim.ui.select = function(choices, options, callback)
@@ -209,6 +231,87 @@ assert_equal(read_calls(3), {
   'agent|list||',
   'tab|list|--workspace|smoke-w',
 })
+assert_health('old-version', {
+  { kind = 'start', message = 'herdr-context.nvim' },
+  { kind = 'ok', message = 'Neovim 0.10 or later is available' },
+  { kind = 'error', message = 'Herdr 0.7.5 or later is required' },
+  { kind = 'ok', message = 'HERDR_WORKSPACE_ID is set' },
+  { kind = 'ok', message = 'HERDR_TAB_ID is set' },
+  { kind = 'ok', message = 'Herdr accepted `agent list`' },
+  { kind = 'ok', message = 'Herdr accepted `tab list`' },
+}, {
+  '--version|||',
+  'agent|list||',
+  'tab|list|--workspace|smoke-w',
+})
+
+assert_health('malformed-version', {
+  { kind = 'start', message = 'herdr-context.nvim' },
+  { kind = 'ok', message = 'Neovim 0.10 or later is available' },
+  { kind = 'warn', message = 'Could not parse the Herdr version' },
+  { kind = 'ok', message = 'HERDR_WORKSPACE_ID is set' },
+  { kind = 'ok', message = 'HERDR_TAB_ID is set' },
+  { kind = 'ok', message = 'Herdr accepted `agent list`' },
+  { kind = 'ok', message = 'Herdr accepted `tab list`' },
+}, {
+  '--version|||',
+  'agent|list||',
+  'tab|list|--workspace|smoke-w',
+})
+
+assert_health('version-failure', {
+  { kind = 'start', message = 'herdr-context.nvim' },
+  { kind = 'ok', message = 'Neovim 0.10 or later is available' },
+  { kind = 'error', message = 'Could not run `herdr --version`' },
+  { kind = 'ok', message = 'HERDR_WORKSPACE_ID is set' },
+  { kind = 'ok', message = 'HERDR_TAB_ID is set' },
+  { kind = 'ok', message = 'Herdr accepted `agent list`' },
+  { kind = 'ok', message = 'Herdr accepted `tab list`' },
+}, {
+  '--version|||',
+  'agent|list||',
+  'tab|list|--workspace|smoke-w',
+})
+
+assert_health('agent-failure', {
+  { kind = 'start', message = 'herdr-context.nvim' },
+  { kind = 'ok', message = 'Neovim 0.10 or later is available' },
+  { kind = 'ok', message = 'herdr 0.7.5' },
+  { kind = 'ok', message = 'HERDR_WORKSPACE_ID is set' },
+  { kind = 'ok', message = 'HERDR_TAB_ID is set' },
+  { kind = 'error', message = 'Herdr did not accept `agent list`' },
+  { kind = 'ok', message = 'Herdr accepted `tab list`' },
+}, {
+  '--version|||',
+  'agent|list||',
+  'tab|list|--workspace|smoke-w',
+})
+
+assert_health('tabs-failure', {
+  { kind = 'start', message = 'herdr-context.nvim' },
+  { kind = 'ok', message = 'Neovim 0.10 or later is available' },
+  { kind = 'ok', message = 'herdr 0.7.5' },
+  { kind = 'ok', message = 'HERDR_WORKSPACE_ID is set' },
+  { kind = 'ok', message = 'HERDR_TAB_ID is set' },
+  { kind = 'ok', message = 'Herdr accepted `agent list`' },
+  { kind = 'error', message = 'Herdr did not accept `tab list`' },
+}, {
+  '--version|||',
+  'agent|list||',
+  'tab|list|--workspace|smoke-w',
+})
+
+with_path(root, function()
+  with_health_capture(function(messages)
+    require('herdr-context.health').check()
+    assert_equal(messages, {
+      { kind = 'start', message = 'herdr-context.nvim' },
+      { kind = 'ok', message = 'Neovim 0.10 or later is available' },
+      { kind = 'error', message = 'Herdr CLI was not found in PATH' },
+    })
+  end)
+  assert_equal(vim.fn.filereadable(log), 0)
+end)
 
 with_herdr_location('', '', function()
   with_health_capture(function(messages)

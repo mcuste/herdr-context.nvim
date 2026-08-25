@@ -21,6 +21,9 @@ smoke:
     {{ nvim }} --headless --noplugin -u tests/minimal_init.lua \
         -c "lua dofile('tests/smoke.lua')" \
         -c "qa!"
+    {{ nvim }} --headless --noplugin -u tests/minimal_init.lua \
+        -c "lua dofile('tests/visual.lua')" \
+        -c "qa!"
 
 verify: format-check test smoke
 

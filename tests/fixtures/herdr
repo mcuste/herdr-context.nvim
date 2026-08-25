@@ -11,7 +11,12 @@ scenario="${HERDR_CONTEXT_TEST_SCENARIO:-single}"
 
 case "$1 $2" in
   --version*)
-    printf 'herdr 0.7.5\n'
+    case "$scenario" in
+      old-version) printf 'herdr 0.7.4\n' ;;
+      malformed-version) printf 'herdr development\n' ;;
+      version-failure) printf 'could not run version\n' >&2; exit 1 ;;
+      *) printf 'herdr 0.7.5\n' ;;
+    esac
     ;;
   'agent list')
     if [ "$scenario" = 'agent-failure' ]; then
