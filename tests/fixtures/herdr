@@ -1,0 +1,30 @@
+#!/bin/sh
+
+if [ "$1 $2" = 'pane send-text' ]; then
+  printf '%s' "$4" > "${HERDR_CONTEXT_TEST_LOG}.text"
+  printf '%s|%s|%s|<text>\n' "$1" "$2" "$3" >> "$HERDR_CONTEXT_TEST_LOG"
+else
+  printf '%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" >> "$HERDR_CONTEXT_TEST_LOG"
+fi
+
+case "$1 $2" in
+  'agent list')
+    if [ "${HERDR_CONTEXT_TEST_SCENARIO:-single}" = "multiple" ]; then
+      printf '{"id":"cli:agent:list","result":{"agents":[{"agent":"omp","workspace_id":"smoke-w","tab_id":"other-t","pane_id":"smoke:p3","agent_status":"working","foreground_cwd":"%s"},{"agent":"omp","workspace_id":"smoke-w","tab_id":"other-t","pane_id":"smoke:p2","agent_status":"idle","foreground_cwd":"%s"}],"type":"agent_list"}}\n' "$PWD" "$PWD"
+    else
+      printf '{"id":"cli:agent:list","result":{"agents":[{"agent":"omp","workspace_id":"smoke-w","tab_id":"smoke-t","pane_id":"smoke:p1","agent_status":"idle","foreground_cwd":"%s"}],"type":"agent_list"}}\n' "$PWD"
+    fi
+    ;;
+  'tab list')
+    printf '{"id":"cli:tab:list","result":{"tabs":[{"label":"Agents","number":2,"tab_id":"other-t","workspace_id":"smoke-w"}],"type":"tab_list"}}\n'
+    ;;
+  'pane send-text')
+    ;;
+  'agent focus')
+    printf '{"id":"cli:agent:focus","result":{"type":"agent_info"}}\n'
+    ;;
+  *)
+    printf '{"error":{"code":"invalid_test_command","message":"invalid test command"}}\n'
+    exit 1
+    ;;
+esac
