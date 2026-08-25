@@ -7,6 +7,8 @@
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
 </p>
 
+![herdr-context.nvim demo](docs/demo/herdr-context-demo.gif)
+
 Send the current file or visual selection from Neovim to a coding agent in
 [Herdr](https://herdr.dev/), a terminal workspace for coding agents. One command finds the right
 agent, places the file reference in its prompt using the syntax it expects, and focuses its pane.

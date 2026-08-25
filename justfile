@@ -27,5 +27,8 @@ smoke:
 
 verify: format-check test smoke
 
+demo:
+    vhs docs/demo/herdr-context-demo.tape
+
 release version *args:
     python3 scripts/release.py "$@"

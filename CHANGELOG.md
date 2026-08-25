@@ -15,6 +15,7 @@ All notable changes to this project are documented in this file. The format foll
 - Focus the agent after successful text placement.
 - Health checks, Vim help, automated tests, and release tooling.
 - User guide, behavior reference, delivery diagram, and development documentation.
+- VHS showcase for whole-file, linewise, partial-selection, and multi-agent picker workflows.
 
 ### Fixed
 
