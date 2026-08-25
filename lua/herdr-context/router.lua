@@ -68,6 +68,22 @@ function M.delivery_target(agent)
   }
 end
 
+local status_indicators = {
+  blocked = '●',
+  working = '●',
+  done = '●',
+  idle = '○',
+  unknown = '·',
+}
+
+local function status_indicator(status) return status_indicators[status] or status_indicators.unknown end
+
+local function agent_title(agent)
+  for _, key in ipairs({ 'title', 'terminal_title_stripped', 'terminal_title' }) do
+    if type(agent[key]) == 'string' and agent[key] ~= '' then return agent[key] end
+  end
+end
+
 function M.make_choices(agents, tabs)
   local metadata = tab_metadata(tabs)
   local ordered = {}
@@ -84,28 +100,21 @@ function M.make_choices(agents, tabs)
     return (left.pane_id or '') < (right.pane_id or '')
   end)
 
-  local bases = {}
-  local counts = {}
-  for index, agent in ipairs(ordered) do
-    local tab = metadata[agent.tab_id]
-    local tab_label = tab and tab.label or agent.tab_id or 'unknown'
-    local base = string.format('%s > %s', tab_label, harness_name(agent))
-    bases[index] = base
-    counts[base] = (counts[base] or 0) + 1
-  end
-
   local choices = {}
   for index, agent in ipairs(ordered) do
-    local label = bases[index]
-    if counts[label] > 1 then label = string.format('%s (%s)', label, agent.pane_id or 'unknown pane') end
+    local status = agent.agent_status
+    if type(status) ~= 'string' or status == '' then status = 'unknown' end
 
-    local details = {}
-    if type(agent.agent_status) == 'string' and agent.agent_status ~= '' then
-      table.insert(details, agent.agent_status)
-    end
+    local tab = metadata[agent.tab_id]
+    local tab_label = tab and tab.label or agent.tab_id or 'unknown'
+    local label =
+      string.format('[%d] %s  Agent: %s  Tab: %s', index, status_indicator(status), harness_name(agent), tab_label)
+
+    local title = agent_title(agent)
+    if title ~= nil then label = label .. '  Title: ' .. title end
+
     local cwd = type(agent.foreground_cwd) == 'string' and agent.foreground_cwd or agent.cwd
-    if type(cwd) == 'string' and cwd ~= '' then table.insert(details, cwd) end
-    if #details > 0 then label = label .. ' | ' .. table.concat(details, ' | ') end
+    if type(cwd) == 'string' and cwd ~= '' then label = label .. '  CWD: ' .. cwd end
 
     table.insert(choices, { agent = agent, label = label })
   end

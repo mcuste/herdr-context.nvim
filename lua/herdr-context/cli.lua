@@ -48,6 +48,9 @@ local agent_fields = {
   'agent',
   'kind',
   'agent_status',
+  'title',
+  'terminal_title',
+  'terminal_title_stripped',
   'foreground_cwd',
   'cwd',
 }

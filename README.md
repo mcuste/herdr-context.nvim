@@ -68,7 +68,7 @@ The leading and trailing spaces are intentional. They keep the reference separat
 
 Full-buffer and whole-line operations reject unsaved changes. Partial selections include their current buffer content, so they remain exact when the buffer is modified.
 
-Picker rows use `tab label > harness name | status | working directory`. Duplicate harness types in one tab include the Herdr pane ID used to place input and focus. The built-in `vim.ui.select` works without dependencies. Users can provide a fuzzy `vim.ui.select` implementation through their preferred picker plugin.
+Picker rows begin with a stable `[n]` match key and an Herdr status glyph. They use `[n]  status  Agent: harness  Tab: name  Title: pane title  CWD: working directory`; pane IDs stay internal.
 
 The plugin never submits the inserted text. Add context or edit it before you press Enter.
 

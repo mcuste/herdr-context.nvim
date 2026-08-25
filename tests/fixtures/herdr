@@ -7,20 +7,40 @@ else
   printf '%s|%s|%s|%s\n' "$1" "$2" "$3" "$4" >> "$HERDR_CONTEXT_TEST_LOG"
 fi
 
+scenario="${HERDR_CONTEXT_TEST_SCENARIO:-single}"
+
 case "$1 $2" in
+  --version*)
+    printf 'herdr 0.7.5\n'
+    ;;
   'agent list')
-    if [ "${HERDR_CONTEXT_TEST_SCENARIO:-single}" = "multiple" ]; then
+    if [ "$scenario" = 'agent-failure' ]; then
+      printf '{"error":{"message":"could not list agents"}}\n'
+      exit 1
+    elif [ "$scenario" = 'multiple' ] || [ "$scenario" = 'tabs-failure' ]; then
       printf '{"id":"cli:agent:list","result":{"agents":[{"agent":"omp","workspace_id":"smoke-w","tab_id":"other-t","pane_id":"smoke:p3","agent_status":"working","foreground_cwd":"%s"},{"agent":"omp","workspace_id":"smoke-w","tab_id":"other-t","pane_id":"smoke:p2","agent_status":"idle","foreground_cwd":"%s"}],"type":"agent_list"}}\n' "$PWD" "$PWD"
     else
       printf '{"id":"cli:agent:list","result":{"agents":[{"agent":"omp","workspace_id":"smoke-w","tab_id":"smoke-t","pane_id":"smoke:p1","agent_status":"idle","foreground_cwd":"%s"}],"type":"agent_list"}}\n' "$PWD"
     fi
     ;;
   'tab list')
+    if [ "$scenario" = 'tabs-failure' ]; then
+      printf '{"error":{"message":"could not list tabs"}}\n'
+      exit 1
+    fi
     printf '{"id":"cli:tab:list","result":{"tabs":[{"label":"Agents","number":2,"tab_id":"other-t","workspace_id":"smoke-w"}],"type":"tab_list"}}\n'
     ;;
   'pane send-text')
+    if [ "$scenario" = 'send-failure' ]; then
+      printf '{"error":{"message":"could not place input"}}\n'
+      exit 1
+    fi
     ;;
   'agent focus')
+    if [ "$scenario" = 'focus-failure' ]; then
+      printf '{"error":{"message":"could not focus agent"}}\n'
+      exit 1
+    fi
     printf '{"id":"cli:agent:focus","result":{"type":"agent_info"}}\n'
     ;;
   *)

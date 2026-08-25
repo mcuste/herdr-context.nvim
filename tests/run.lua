@@ -137,6 +137,7 @@ test('normalizes an inclusive visual line range', function()
 end)
 
 test('keeps partial single-line selection content', function()
+  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fn.getcwd() .. '/README.md'))
   local buf = vim.api.nvim_get_current_buf()
   local selection = require('herdr-context.context').from_selection(buf, 'v', { 1, 2 }, { 1, 6 })
 
@@ -165,11 +166,23 @@ test('parses a Herdr agent list response into records', function()
   local cli = require('herdr-context.cli')
   local stdout = vim.json.encode({
     id = 'cli:agent:list',
-    result = { type = 'agent_list', agents = { { pane_id = 'w1:p1', workspace_id = 'w1', tab_id = 't1' } } },
+    result = {
+      type = 'agent_list',
+      agents = {
+        {
+          pane_id = 'w1:p1',
+          workspace_id = 'w1',
+          tab_id = 't1',
+          terminal_title_stripped = 'Review picker',
+        },
+      },
+    },
   })
   local result = cli.parse_agent_list(cli.parse_result({ code = 0, stdout = stdout, stderr = '' }))
   assert_equal(result.ok, true)
-  assert_equal(result.value.agents, { { pane_id = 'w1:p1', workspace_id = 'w1', tab_id = 't1' } })
+  assert_equal(result.value.agents, {
+    { pane_id = 'w1:p1', workspace_id = 'w1', tab_id = 't1', terminal_title_stripped = 'Review picker' },
+  })
 end)
 
 test('uses a structured Herdr error message', function()
@@ -191,6 +204,32 @@ end)
 test('accepts successful empty output for side-effect commands', function()
   local result = require('herdr-context.cli').parse_result({ code = 0, stdout = '', stderr = '' }, true)
   assert_equal(result, { ok = true, code = 0, value = {} })
+end)
+
+test('normalizes CLI protocol failure responses', function()
+  local parse_result = require('herdr-context.cli').parse_result
+  local cases = {
+    {
+      input = { code = 1, stdout = '', stderr = 'permission denied' },
+      expected = { ok = false, code = 1, error = 'permission denied' },
+    },
+    {
+      input = { code = 0, stdout = '{"error":{"message":"agent is unavailable"}}', stderr = '' },
+      expected = { ok = false, code = 0, error = 'agent is unavailable' },
+    },
+    {
+      input = { code = 0, stdout = '{}', stderr = '' },
+      expected = { ok = false, code = 0, error = 'Herdr response has no result.' },
+    },
+    {
+      input = { code = 0, stdout = '', stderr = '' },
+      expected = { ok = false, code = 0, error = 'Herdr returned no JSON output.' },
+    },
+  }
+
+  for _, case in ipairs(cases) do
+    assert_equal(parse_result(case.input), case.expected)
+  end
 end)
 
 test('rejects malformed Herdr list records at the CLI boundary', function()
@@ -252,16 +291,36 @@ test('parses an agent delivery target before sending', function()
   assert_equal(err.code, 'blocked')
 end)
 
-test('labels and orders duplicate harness choices by pane', function()
+test('formats indexed agent, tab, title, and cwd choices', function()
   local router = require('herdr-context.router')
   local choices = router.make_choices({
-    { agent = 'omp', tab_id = 't1', pane_id = 'p3', agent_status = 'working' },
-    { agent = 'omp', tab_id = 't1', pane_id = 'p2', agent_status = 'idle', foreground_cwd = '/work' },
+    { agent = 'omp', tab_id = 't1', pane_id = 'p3', agent_status = 'working', title = 'Review changes' },
+    {
+      agent = 'omp',
+      tab_id = 't1',
+      pane_id = 'p2',
+      agent_status = 'idle',
+      terminal_title_stripped = 'Fix picker labels',
+      foreground_cwd = '/work',
+    },
   }, {
     { tab_id = 't1', label = 'Editor' },
   })
-  assert_equal(choices[1].label, 'Editor > omp (p2) | idle | /work')
-  assert_equal(choices[2].label, 'Editor > omp (p3) | working')
+  assert_equal(choices[1].label, '[1] ○  Agent: omp  Tab: Editor  Title: Fix picker labels  CWD: /work')
+  assert_equal(choices[2].label, '[2] ●  Agent: omp  Tab: Editor  Title: Review changes')
+end)
+
+test('uses Herdr status glyphs for every state', function()
+  local choices = require('herdr-context.router').make_choices({
+    { agent = 'omp', tab_id = 't1', pane_id = 'p1', agent_status = 'blocked' },
+    { agent = 'omp', tab_id = 't1', pane_id = 'p2', agent_status = 'done' },
+    { agent = 'omp', tab_id = 't1', pane_id = 'p3' },
+  }, {})
+  assert_equal(vim.tbl_map(function(choice) return choice.label end, choices), {
+    '[1] ●  Agent: omp  Tab: t1',
+    '[2] ●  Agent: omp  Tab: t1',
+    '[3] ·  Agent: omp  Tab: t1',
+  })
 end)
 
 test('falls back to and sends through one workspace agent', function()
@@ -367,8 +426,8 @@ test('selects among multiple agents in the current tab', function()
   end)
 
   assert_equal(labels, {
-    'Editor > omp (w1:p2) | idle | ' .. vim.fn.getcwd(),
-    'Editor > omp (w1:p3) | working | ' .. vim.fn.getcwd(),
+    '[1] ○  Agent: omp  Tab: Editor  CWD: ' .. vim.fn.getcwd(),
+    '[2] ●  Agent: omp  Tab: Editor  CWD: ' .. vim.fn.getcwd(),
   })
   assert_equal(calls, {
     { 'list' },
@@ -419,6 +478,19 @@ test('setup creates the command without a default mapping', function()
   plugin.setup({ mappings = { buffer = '<leader>ac' } })
   assert_equal(plugin.config.mappings.buffer, '<leader>ac')
   assert_equal(plugin.config.mappings.selection, '')
+end)
+
+test('setup registers configured normal and visual mappings', function()
+  local plugin = require('herdr-context')
+  local buffer_mapping = '<Plug>(herdr-context-test-buffer)'
+  local selection_mapping = '<Plug>(herdr-context-test-selection)'
+
+  plugin.setup({ mappings = { buffer = buffer_mapping, selection = selection_mapping } })
+
+  assert_equal(vim.fn.maparg(buffer_mapping, 'n', false, true).lhs, buffer_mapping)
+  assert_equal(vim.fn.maparg(selection_mapping, 'x', false, true).lhs, selection_mapping)
+  vim.keymap.del('n', buffer_mapping)
+  vim.keymap.del('x', selection_mapping)
 end)
 
 test('rejects an invalid mapping before replacing configuration', function()
