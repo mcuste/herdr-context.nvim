@@ -29,6 +29,15 @@ Sleep 3s
 Ctrl+C
 Ctrl+H
 Sleep 1s
+Type ":HerdrContextSendBuffers"
+Sleep 1s
+Enter
+Wait+Screen /@docs\/demo\/context-helpers.lua/
+Sleep 3s
+
+Ctrl+C
+Ctrl+H
+Sleep 1s
 Type "7G"
 Type "Vjj"
 Sleep 2s
@@ -54,7 +63,7 @@ Sleep 3s
 
 Ctrl+C
 Hide
-Wait+Screen@30s /Pi/
+Wait+Screen@30s /Claude/
 Sleep 1s
 Show
 Sleep 3s
@@ -64,7 +73,7 @@ Type ":HerdrContextSendBuffer"
 Sleep 1s
 Enter
 Sleep 2s
-Type@200ms "pi"
+Type@200ms "cl"
 Sleep 2s
 Enter
 Wait+Screen /@docs\/demo\/context-example.lua/

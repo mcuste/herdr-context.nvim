@@ -24,6 +24,7 @@ start_agent() {
   local kind=$2
   local name=$3
   local display=$4
+  shift 4
 
   herdr --session "$session" pane rename "$pane_id" "$display" >/dev/null
   herdr --session "$session" agent start "$name" \
@@ -31,7 +32,7 @@ start_agent() {
     --pane "$pane_id" \
     --timeout 60000 \
     -- \
-    --no-session >/dev/null
+    "$@" >/dev/null
 }
 
 start_server() {
@@ -74,10 +75,10 @@ start_demo() {
     --no-focus)
   agent_pane=$(printf '%s' "$split" | json_value "['result']['pane']['pane_id']")
 
-  start_agent "$agent_pane" omp omp OMP
+  start_agent "$agent_pane" omp omp OMP --no-session
 
   herdr --session "$session" pane run "$root_pane" \
-    "nvim -n -c 'set runtimepath^=.' -c \"lua require('herdr-context').setup({ mappings = { buffer = 'gs', selection = 'gs' } })\" docs/demo/context-example.lua"
+    "nvim -n --cmd 'set runtimepath^=.' -c \"lua require('herdr-context').setup({ mappings = { buffer = 'gs', buffers = 'gS', selection = 'gs' } })\" docs/demo/context-example.lua docs/demo/context-helpers.lua"
   herdr --session "$session" pane wait-output "$root_pane" \
     --match 'herdr-context.nvim demo' \
     --timeout 10000 >/dev/null
@@ -99,18 +100,18 @@ add_picker_agent() {
     --no-focus)
   agent_pane=$(printf '%s' "$split" | json_value "['result']['pane']['pane_id']")
 
-  start_agent "$agent_pane" pi pi Pi
+  start_agent "$agent_pane" claude claude Claude
   herdr --session "$session" pane focus \
     --direction left \
     --pane "$source_pane" >/dev/null
 }
 
 schedule_picker_agent() {
-  sleep 42
+  sleep 50
   add_picker_agent "$1"
 }
 
-for command in bash herdr nvim omp pi python3; do
+for command in bash claude herdr nvim omp python3; do
   command -v "$command" >/dev/null || {
     printf 'Missing required command: %s\n' "$command" >&2
     exit 1
