@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-26
+
 ### Added
 
 - `:HerdrContextSendBuffers` and `send_buffers()` send every open saved file as one reference list,
