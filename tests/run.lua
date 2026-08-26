@@ -112,6 +112,82 @@ test('appends partial selection content after native ranges', function()
   assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-18 \n\n````lua\nlocal ``` value\n````')
 end)
 
+test('puts every reference on its own line', function()
+  local adapters = require('herdr-context.adapters')
+  local contexts = { { relative_file = 'lua/plugin.lua' }, { relative_file = 'README.md' } }
+
+  assert_equal(adapters.format_many({ agent = 'omp' }, contexts), ' @lua/plugin.lua \n @README.md ')
+  assert_equal(adapters.format_many({ agent = 'codex' }, contexts), ' lua/plugin.lua \n README.md ')
+  assert_equal(adapters.format_many({ agent = 'omp' }, { contexts[1] }), ' @lua/plugin.lua ')
+end)
+
+test('keeps selected text with its own reference', function()
+  local adapters = require('herdr-context.adapters')
+  local contexts = {
+    {
+      relative_file = 'README.md',
+      filetype = 'markdown',
+      start_line = 3,
+      end_line = 3,
+      range = true,
+      selection = '# title',
+    },
+    { relative_file = 'lua/plugin.lua' },
+  }
+
+  assert_equal(
+    adapters.format_many({ agent = 'omp' }, contexts),
+    ' @README.md#L3-3 \n\n```markdown\n# title\n```\n @lua/plugin.lua '
+  )
+end)
+
+test('collects every listed buffer saved on disk', function()
+  local plugin_file = vim.fs.normalize(vim.fn.getcwd() .. '/lua/herdr-context/init.lua')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  vim.cmd('edit ' .. vim.fn.fnameescape(plugin_file))
+  vim.cmd('enew')
+  local scratch = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(scratch, 0, -1, false, { 'unsaved' })
+
+  local contexts, skipped = require('herdr-context.context').from_buffers()
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(vim.tbl_map(function(item) return item.file end, contexts), { selection_fixture, plugin_file })
+  assert_equal(skipped, 1)
+end)
+
+test('includes a listed buffer that is not loaded yet', function()
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local readme = vim.fs.normalize(vim.fn.getcwd() .. '/README.md')
+  local unloaded = vim.fn.bufadd(readme)
+  vim.bo[unloaded].buflisted = true
+
+  local contexts, skipped = require('herdr-context.context').from_buffers()
+  local loaded = vim.api.nvim_buf_is_loaded(unloaded)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(loaded, false)
+  assert_equal(vim.tbl_map(function(item) return item.file end, contexts), { selection_fixture, readme })
+  assert_equal(skipped, 0)
+end)
+
+test('replaces only the current buffer with the focused context', function()
+  local context = require('herdr-context.context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.normalize(vim.fn.getcwd() .. '/README.md')))
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local focus = context.from_selection(0, 'v', { 1, 2 }, { 1, 6 })
+
+  local contexts = context.from_buffers(focus)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(#contexts, 2)
+  assert_equal(contexts[1].range, nil)
+  assert_equal(contexts[2], focus)
+end)
+
 test('keeps an absolute file outside the agent working directory', function()
   local context = require('herdr-context.context')
   local normalized = context.for_agent({ file = '/other/plugin.lua' }, '/workspace')
@@ -481,10 +557,114 @@ test('does not send to a blocked agent', function()
   assert_equal(text_called, false)
 end)
 
+test('sends every open buffer as one reference list', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.normalize(vim.fn.getcwd() .. '/README.md')))
+  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.normalize(vim.fn.getcwd() .. '/CHANGELOG.md')))
+
+  local calls = {}
+  local stubs = {
+    list_agents = function(callback)
+      callback({
+        ok = true,
+        value = {
+          agents = {
+            {
+              workspace_id = 'w1',
+              tab_id = 't1',
+              pane_id = 'w1:p1',
+              agent_status = 'idle',
+              foreground_cwd = vim.fn.getcwd(),
+            },
+          },
+        },
+      })
+    end,
+    send_text = function(target, text, callback)
+      table.insert(calls, { 'text', target, text })
+      callback({ ok = true, value = {} })
+    end,
+    focus = function(target, callback)
+      table.insert(calls, { 'focus', target })
+      callback({ ok = true, value = {} })
+    end,
+  }
+
+  with_environment('w1', 't1', function() with_cli_stubs(stubs, plugin.send_buffers) end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(calls, {
+    { 'text', 'w1:p1', ' @README.md \n @CHANGELOG.md ' },
+    { 'focus', 'w1:p1' },
+  })
+end)
+
+test('sends the current selection with the other open buffers', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.normalize(vim.fn.getcwd() .. '/README.md')))
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  vim.bo.filetype = 'markdown'
+
+  local sent
+  local stubs = {
+    list_agents = function(callback)
+      callback({
+        ok = true,
+        value = {
+          agents = {
+            { agent = 'omp', workspace_id = 'w1', tab_id = 't1', pane_id = 'w1:p1', foreground_cwd = vim.fn.getcwd() },
+          },
+        },
+      })
+    end,
+    send_text = function(_, text, callback)
+      sent = text
+      callback({ ok = true, value = {} })
+    end,
+    focus = function(_, callback) callback({ ok = true, value = {} }) end,
+  }
+
+  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  vim.cmd('normal! v')
+  vim.api.nvim_win_set_cursor(0, { 1, 6 })
+  with_environment('w1', 't1', function() with_cli_stubs(stubs, plugin.send_buffers) end)
+  vim.cmd('normal! ' .. vim.keycode('<Esc>'))
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(sent, ' @README.md \n @tests/fixtures/selection.md#L1-1 \n\n```markdown\n# herdr\n```')
+end)
+
+test('reports skipped buffers and refuses when none is saved', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('enew')
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'unsaved' })
+
+  local text_called = false
+  with_notification_capture(function(notifications)
+    with_environment('w1', 't1', function()
+      with_cli_stubs({ send_text = function() text_called = true end }, plugin.send_buffers)
+    end)
+    assert_equal(notifications[1].message, 'No open buffer is saved on disk.')
+
+    vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.normalize(vim.fn.getcwd() .. '/README.md')))
+    with_environment('', '', function()
+      with_cli_stubs({ send_text = function() text_called = true end }, plugin.send_buffers)
+    end)
+    assert_equal(notifications[2].message, 'Skipped 1 buffer with unsaved changes or no file on disk.')
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(text_called, false)
+end)
+
 test('setup creates the command without a default mapping', function()
   local plugin = require('herdr-context')
   plugin.setup()
   assert_equal(plugin.config.mappings.buffer, '')
+  assert_equal(plugin.config.mappings.buffers, '')
   assert_equal(plugin.config.mappings.selection, '')
 
   plugin.setup({ mappings = { buffer = '<leader>ac' } })

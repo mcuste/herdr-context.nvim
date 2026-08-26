@@ -118,6 +118,27 @@ assert_equal(read_calls(3), {
 })
 assert_equal(read_text(), ' @README.md ')
 
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/CHANGELOG.md'))
+vim.cmd('HerdrContextSendBuffers')
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' @README.md \n @CHANGELOG.md ')
+
+vim.bo.filetype = 'markdown'
+vim.api.nvim_buf_set_mark(0, '<', 1, 0, {})
+vim.api.nvim_buf_set_mark(0, '>', 1, 4, {})
+vim.cmd("'<,'>HerdrContextSendBuffers")
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' @README.md \n @CHANGELOG.md#L1-1 \n\n```markdown\n# Cha\n```')
+vim.cmd('bwipeout!')
+
 vim.bo.filetype = 'markdown'
 vim.api.nvim_buf_set_mark(0, '<', 1, 0, {})
 vim.api.nvim_buf_set_mark(0, '>', 1, 6, {})

@@ -34,9 +34,27 @@ function M.from_buffer(buf)
   if context.modified then return nil, 'The current buffer has unsaved changes.' end
   if vim.fn.filereadable(context.file) ~= 1 then return nil, 'The current buffer is not saved on disk.' end
 
-  context.start_line = 1
-  context.end_line = vim.api.nvim_buf_line_count(buf)
   return context
+end
+
+function M.from_buffers(focus)
+  local current = vim.api.nvim_get_current_buf()
+  local contexts = {}
+  local skipped = 0
+
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buflisted then
+      local buffer_context = M.from_buffer(buf)
+      if focus ~= nil and buf == current then buffer_context = focus end
+      if buffer_context == nil then
+        skipped = skipped + 1
+      else
+        table.insert(contexts, buffer_context)
+      end
+    end
+  end
+
+  return contexts, skipped
 end
 
 function M.from_selection(buf, mode, first, last)

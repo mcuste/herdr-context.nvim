@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- `:HerdrContextSendBuffers` and `send_buffers()` send every open saved file as one reference list,
+  keeping the current buffer's selection.
+- `mappings.buffers` binds the new command in Normal and Visual mode.
+
 ## [1.0.0] - 2026-08-25
 
 ### Added

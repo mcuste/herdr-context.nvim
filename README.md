@@ -9,9 +9,9 @@
 
 ![herdr-context.nvim demo](docs/demo/herdr-context-demo.gif)
 
-Send the current file or visual selection from Neovim to a coding agent in
+Send the current file, all open files, or a visual selection from Neovim to a coding agent in
 [Herdr](https://herdr.dev/), a terminal workspace for coding agents. One command finds the right
-agent, places the file reference in its prompt using the syntax it expects, and focuses its pane.
+agent, places the file references in its prompt using the syntax it expects, and focuses its pane.
 You can add to or change the prompt before submitting it.
 
 The plugin supports OMP, Pi, Claude Code, and Codex import syntax. It has no Neovim plugin
@@ -36,8 +36,13 @@ Agent selection follows these steps:
 | What you send from Neovim | What the plugin adds | Why |
 | --- | --- | --- |
 | Current file | A file reference | The agent can read the complete file from disk |
+| All open files | One reference for each file | The agent can read every open file from disk |
 | One or more whole lines selected in Visual mode | A file reference with the inclusive start and end lines | The agent can read only that range from disk |
 | Part of a line or a block selection | A ranged file reference followed by the exact selected text in a fenced code block | Line numbers alone cannot describe the exact characters or block |
+
+The all-files operation sends every listed buffer that is saved on disk, in buffer order. It skips
+buffers with unsaved changes and buffers without a file, and reports the number skipped. Started
+from Visual mode, it keeps the selection for the current file and sends the others whole.
 
 The current-file operation and whole-line Visual selections point to the version on disk. The plugin
 refuses them when the buffer has unsaved changes. A partial-line or block selection can
@@ -66,8 +71,9 @@ Run `:checkhealth herdr-context` after installation to check the first three req
   'mcuste/herdr-context.nvim',
   opts = {
     mappings = {
-      buffer = '<leader>ac',
-      selection = '<leader>ac',
+      buffer = '<leader>aa',
+      buffers = '<leader>aA',
+      selection = '<leader>aa',
     },
   },
 }
@@ -84,8 +90,9 @@ later(function()
   add({ 'https://github.com/mcuste/herdr-context.nvim' })
   require('herdr-context').setup({
     mappings = {
-      buffer = '<leader>ac',
-      selection = '<leader>ac',
+      buffer = '<leader>aa',
+      buffers = '<leader>aA',
+      selection = '<leader>aa',
     },
   })
 end)
@@ -98,21 +105,24 @@ later(function()
   add('mcuste/herdr-context.nvim')
   require('herdr-context').setup({
     mappings = {
-      buffer = '<leader>ac',
-      selection = '<leader>ac',
+      buffer = '<leader>aa',
+      buffers = '<leader>aA',
+      selection = '<leader>aa',
     },
   })
 end)
 ```
 
-Both mappings can use the same keys because one applies in Normal mode and the other in Visual
-mode. No mappings are created unless you configure them.
+The `buffer` and `selection` mappings can use the same keys because one applies in Normal mode and
+the other in Visual mode. Give `buffers` its own key, because it applies in both modes. No mappings
+are created unless you configure them.
 
 ## Commands
 
 | Command | Mode | Action |
 | --- | --- | --- |
 | `:HerdrContextSendBuffer` | Normal | Place a reference to the current file |
+| `:HerdrContextSendBuffers` | Normal, Visual | Place a reference to every open file |
 | `:HerdrContextSendSelection` | Visual | Place a reference to the selected range |
 | `:checkhealth herdr-context` | Any | Check Neovim, Herdr, and the current Herdr environment |
 
@@ -132,7 +142,7 @@ For `lua/plugin.lua` and lines 18 through 42:
 | Codex | ` lua/plugin.lua ` | ` lua/plugin.lua Lines 18-42. ` |
 | Unknown agent type | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 
-Codex paths that contain spaces are enclosed in double quotes.
+Codex paths that contain spaces are enclosed in double quotes. Each file starts on its own line.
 
 ## Picker
 
@@ -156,6 +166,7 @@ The complete default configuration is:
 require('herdr-context').setup({
   mappings = {
     buffer = '',
+    buffers = '',
     selection = '',
   },
 })
@@ -164,9 +175,10 @@ require('herdr-context').setup({
 | Option | Mode | Default | Purpose |
 | --- | --- | --- | --- |
 | `mappings.buffer` | Normal | Disabled | Call `send_buffer()` |
+| `mappings.buffers` | Normal, Visual | Disabled | Call `send_buffers()` |
 | `mappings.selection` | Visual | Disabled | Call `send_selection()` |
 
-An empty string disables that mapping. Setup always creates both user commands.
+An empty string disables that mapping. Setup always creates all three user commands.
 
 ## Lua API
 
@@ -175,12 +187,14 @@ local herdr_context = require('herdr-context')
 
 herdr_context.setup({
   mappings = {
-    buffer = '<leader>ac',
-    selection = '<leader>ac',
+    buffer = '<leader>aa',
+    buffers = '<leader>aA',
+    selection = '<leader>aa',
   },
 })
 
 herdr_context.send_buffer()
+herdr_context.send_buffers()
 herdr_context.send_selection()
 ```
 
@@ -188,6 +202,7 @@ herdr_context.send_selection()
 | --- | --- |
 | `setup(config)` | Validate configuration, create commands, and create configured mappings |
 | `send_buffer()` | Place a reference to the current saved file |
+| `send_buffers()` | Place a reference to every open saved file |
 | `send_selection()` | Place a reference to the current or most recent Visual selection |
 
 ## Failure behavior
@@ -197,6 +212,7 @@ The plugin stops before each dependent action when something fails:
 | Failure | Result |
 | --- | --- |
 | Missing file, unsaved whole-file input, or unsaved whole lines | No Herdr command runs |
+| No open buffer saved on disk | No Herdr command runs |
 | Missing Herdr environment or failed agent list | No text is placed |
 | Failed tab list or cancelled picker | No text is placed |
 | Invalid or blocked target | No text is placed |

@@ -67,4 +67,15 @@ function M.for_agent(agent) return M.get(agent.kind or agent.agent) end
 
 function M.format(agent, context) return M.for_agent(agent).format(context) end
 
+-- One file per line, so a fenced selection cannot swallow the next reference.
+function M.format_many(agent, contexts)
+  local adapter = M.for_agent(agent)
+  local prompts = {}
+  for _, context in ipairs(contexts) do
+    table.insert(prompts, adapter.format(context))
+  end
+
+  return table.concat(prompts, '\n')
+end
+
 return M

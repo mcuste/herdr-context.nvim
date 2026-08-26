@@ -7,13 +7,26 @@ places, and where each operation stops on failure.
 
 ## Editor input
 
-Both operations require a normal file buffer with a path that already exists on disk. The plugin
+Every operation requires a normal file buffer with a path that already exists on disk. The plugin
 normalizes the path before it calls Herdr.
 
 ### Whole file
 
 `send_buffer()` uses the current file as it exists on disk. It refuses a modified buffer because a
 path reference would point the agent at older content.
+
+### All open files
+
+`send_buffers()` uses every listed buffer that is saved on disk, in buffer order. This includes
+buffers that Neovim has not loaded yet, for example files from the command line or a restored
+session. It skips a buffer that has unsaved changes, has no file, or is not a normal file buffer,
+and warns how many buffers it skipped. It stops when no buffer remains.
+
+The current buffer is the only one that can carry a selection. `send_buffers()` reads the selection
+when it runs in Visual mode or with an Ex range, and then applies the selection rules below to that
+file. It stops and reports the reason when the selection itself is invalid, for example whole lines
+in a modified buffer. Without a selection, the current file sends a whole-file reference like the
+others.
 
 ### Visual selection
 
@@ -139,6 +152,19 @@ For `lua/plugin.lua`:
 Every reference starts and ends with one space. This prevents a new reference from joining text
 already present in the agent input. Codex paths that contain spaces are enclosed in double quotes.
 
+Several files are placed as one text. The references use the same adapter and each file starts on
+its own line, so selected text stays with its own reference and a fenced code block cannot swallow
+the next one:
+
+````text
+ @README.md#L3-3 
+
+```markdown
+# title
+```
+ @lua/plugin.lua 
+````
+
 ## Herdr commands
 
 The plugin starts Herdr with argument arrays through `vim.system`. It does not build shell command
@@ -164,6 +190,8 @@ submits the prompt.
 | Failure point | Notification level | Later actions |
 | --- | --- | --- |
 | Invalid buffer, missing file, or disallowed unsaved changes | Warning | No Herdr command |
+| No open buffer saved on disk | Warning | No Herdr command |
+| Invalid selection in the current buffer | Warning | No Herdr command |
 | Missing workspace or tab environment | Error | No Herdr command |
 | Agent list failure or invalid response | Error | No routing, placement, or focus |
 | No agent in the current workspace | Warning | No placement or focus |
@@ -180,6 +208,7 @@ All messages use `vim.notify` with the title `herdr-context.nvim`.
 
 - The plugin does not save or modify the current buffer.
 - The plugin does not send a full file body. It sends a path reference.
+- The plugin does not send unlisted, unloaded, or unsaved buffers.
 - The plugin includes source text only for partial-line and block selections.
 - The plugin does not start an agent when the workspace has none.
 - The plugin does not submit the target agent's input.

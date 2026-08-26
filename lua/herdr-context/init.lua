@@ -8,6 +8,7 @@ local M = {}
 M.config = {
   mappings = {
     buffer = '',
+    buffers = '',
     selection = '',
   },
 }
@@ -49,9 +50,13 @@ local function herdr_location()
   return { workspace_id = workspace_id, tab_id = tab_id }
 end
 
-local function insert_context(buffer_context, target)
-  local agent_context = context.for_agent(buffer_context, target.foreground_cwd or target.cwd)
-  local text = adapters.format(target, agent_context)
+local function insert_contexts(contexts, target)
+  local cwd = target.foreground_cwd or target.cwd
+  local agent_contexts = {}
+  for _, buffer_context in ipairs(contexts) do
+    table.insert(agent_contexts, context.for_agent(buffer_context, cwd))
+  end
+  local text = adapters.format_many(target, agent_contexts)
 
   cli.send_text(target.pane_id, text, function(text_result)
     if not text_result.ok then
@@ -67,7 +72,7 @@ local function insert_context(buffer_context, target)
   end)
 end
 
-local function parse_and_insert(buffer_context, agent)
+local function parse_and_insert(contexts, agent)
   local target, target_error = router.delivery_target(agent)
   if target == nil then
     local level = target_error.code == 'invalid_agent' and vim.log.levels.ERROR or vim.log.levels.WARN
@@ -75,10 +80,10 @@ local function parse_and_insert(buffer_context, agent)
     return
   end
 
-  insert_context(buffer_context, target)
+  insert_contexts(contexts, target)
 end
 
-local function select_and_insert(buffer_context, candidates, workspace_id)
+local function select_and_insert(contexts, candidates, workspace_id)
   cli.list_tabs(workspace_id, function(result)
     if not result.ok then
       notify('Could not list Herdr tabs: ' .. result.error, vim.log.levels.ERROR)
@@ -91,12 +96,12 @@ local function select_and_insert(buffer_context, candidates, workspace_id)
       format_item = function(choice) return choice.label end,
     }, function(choice)
       if choice == nil then return end
-      parse_and_insert(buffer_context, choice.agent)
+      parse_and_insert(contexts, choice.agent)
     end)
   end)
 end
 
-local function route_and_insert(buffer_context, agents, location)
+local function route_and_insert(contexts, agents, location)
   local candidates, route_error = router.candidates(agents, location.workspace_id, location.tab_id)
   if candidates == nil then
     notify(route_error.message, vim.log.levels.WARN)
@@ -104,14 +109,14 @@ local function route_and_insert(buffer_context, agents, location)
   end
 
   if #candidates == 1 then
-    parse_and_insert(buffer_context, candidates[1])
+    parse_and_insert(contexts, candidates[1])
     return
   end
 
-  select_and_insert(buffer_context, candidates, location.workspace_id)
+  select_and_insert(contexts, candidates, location.workspace_id)
 end
 
-local function send_context(buffer_context)
+local function send_contexts(contexts)
   local location, location_error = herdr_location()
   if location == nil then
     notify(location_error, vim.log.levels.ERROR)
@@ -124,19 +129,32 @@ local function send_context(buffer_context)
       return
     end
 
-    route_and_insert(buffer_context, result.value.agents, location)
+    route_and_insert(contexts, result.value.agents, location)
   end)
 end
 
-local function visual_context()
+local function visual_mode()
   local mode = vim.fn.mode()
-  if mode ~= 'v' and mode ~= 'V' and mode ~= '\22' then return context.from_selection(0) end
+  if mode ~= 'v' and mode ~= 'V' and mode ~= '\22' then return nil end
+  return mode
+end
+
+local function visual_context()
+  local mode = visual_mode()
+  if mode == nil then return context.from_selection(0) end
 
   local anchor = vim.fn.getpos('v')
   local cursor = vim.fn.getpos('.')
   local first = { anchor[2], anchor[3] - 1 }
   local last = { cursor[2], cursor[3] - 1 }
   return context.from_selection(0, mode, first, last)
+end
+
+-- A nil result is not a failure here; it means the current buffer sends its whole file.
+local function focus_context(opts)
+  if visual_mode() ~= nil then return visual_context() end
+  if type(opts) == 'table' and (opts.range or 0) > 0 then return context.from_selection(0) end
+  return nil
 end
 
 function M.setup(config)
@@ -146,6 +164,11 @@ function M.setup(config)
     desc = 'Send the current file to its Herdr agent',
     force = true,
   })
+  vim.api.nvim_create_user_command('HerdrContextSendBuffers', M.send_buffers, {
+    desc = 'Send every open file to its Herdr agent',
+    force = true,
+    range = true,
+  })
   vim.api.nvim_create_user_command('HerdrContextSendSelection', M.send_selection, {
     desc = 'Send the visual selection to its Herdr agent',
     force = true,
@@ -154,6 +177,14 @@ function M.setup(config)
 
   if M.config.mappings.buffer ~= '' then
     vim.keymap.set('n', M.config.mappings.buffer, M.send_buffer, { desc = 'Send buffer to Herdr agent' })
+  end
+  if M.config.mappings.buffers ~= '' then
+    vim.keymap.set(
+      { 'n', 'x' },
+      M.config.mappings.buffers,
+      M.send_buffers,
+      { desc = 'Send all open buffers to Herdr agent' }
+    )
   end
   if M.config.mappings.selection ~= '' then
     vim.keymap.set('x', M.config.mappings.selection, M.send_selection, { desc = 'Send selection to Herdr agent' })
@@ -167,7 +198,28 @@ function M.send_buffer()
     return
   end
 
-  send_context(buffer_context)
+  send_contexts({ buffer_context })
+end
+
+function M.send_buffers(opts)
+  local focus, focus_error = focus_context(opts)
+  if focus_error ~= nil then
+    notify(focus_error, vim.log.levels.WARN)
+    return
+  end
+
+  local contexts, skipped = context.from_buffers(focus)
+  if #contexts == 0 then
+    notify('No open buffer is saved on disk.', vim.log.levels.WARN)
+    return
+  end
+  if skipped > 0 then
+    local noun = skipped == 1 and 'buffer' or 'buffers'
+    local message = string.format('Skipped %d %s with unsaved changes or no file on disk.', skipped, noun)
+    notify(message, vim.log.levels.WARN)
+  end
+
+  send_contexts(contexts)
 end
 
 function M.send_selection()
@@ -177,7 +229,7 @@ function M.send_selection()
     return
   end
 
-  send_context(selection_context)
+  send_contexts({ selection_context })
 end
 
 return M

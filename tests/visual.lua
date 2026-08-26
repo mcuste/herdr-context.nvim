@@ -62,4 +62,22 @@ assert_equal(read_calls(3), {
 })
 assert_equal(read_text(), selection.text)
 vim.keymap.del('x', mapping)
+
+local buffers_mapping = 'gS'
+require('herdr-context').setup({ mappings = { buffers = buffers_mapping } })
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/CHANGELOG.md'))
+vim.api.nvim_win_set_cursor(0, { 1, 0 })
+vim.cmd('normal! v')
+vim.api.nvim_win_set_cursor(0, { 1, 4 })
+assert_equal(vim.fn.mode(), 'v')
+vim.api.nvim_feedkeys(vim.keycode(buffers_mapping), 'mx', false)
+
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' @README.md \n @CHANGELOG.md#L1-1 \n\n```markdown\n# Cha\n```')
+vim.keymap.del('n', buffers_mapping)
+vim.keymap.del('x', buffers_mapping)
 print('Visual selection smoke test passed')
