@@ -143,7 +143,7 @@ vim.cmd('bwipeout!')
 vim.bo.filetype = 'markdown'
 vim.api.nvim_buf_set_mark(0, '<', 1, 0, {})
 vim.api.nvim_buf_set_mark(0, '>', 1, 6, {})
-vim.cmd("'<,'>HerdrContextSendSelection")
+vim.cmd("'<,'>HerdrContextSendBuffer")
 assert_equal(read_calls(3), {
   'agent|list||',
   'pane|send-text|smoke:p1|<text>',

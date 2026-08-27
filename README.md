@@ -116,7 +116,6 @@ Run `:checkhealth herdr-context` after installation to check the first three req
     mappings = {
       buffer = '<leader>aa',
       buffers = '<leader>aA',
-      selection = '<leader>aa',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
     },
@@ -137,7 +136,6 @@ later(function()
     mappings = {
       buffer = '<leader>aa',
       buffers = '<leader>aA',
-      selection = '<leader>aa',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
     },
@@ -154,7 +152,6 @@ later(function()
     mappings = {
       buffer = '<leader>aa',
       buffers = '<leader>aA',
-      selection = '<leader>aa',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
     },
@@ -162,22 +159,20 @@ later(function()
 end)
 ```
 
-The `buffer` and `selection` mappings can use the same keys because one applies in Normal mode and
-the other in Visual mode. Give `buffers`, `diagnostics`, and `buffers_diagnostics` their own keys,
-because they apply in both modes. No mappings are created unless you configure them.
+The `buffer`, `buffers`, `diagnostics`, and `buffers_diagnostics` mappings apply in both Normal and
+Visual mode. Give each mapping its own keys. No mappings are created unless you configure them.
 
 ## Commands
 
 | Command                               | Mode           | Action                                                                 |
 | ------------------------------------- | -------------- | ---------------------------------------------------------------------- |
-| `:HerdrContextSendBuffer`             | Normal         | Place a reference to the current file                                  |
+| `:HerdrContextSendBuffer`             | Normal, Visual | Place a reference to the current file or selected range                |
 | `:HerdrContextSendBuffers`            | Normal, Visual | Place a reference to every open file                                   |
-| `:HerdrContextSendSelection`          | Visual         | Place a reference to the selected range                                |
 | `:HerdrContextSendDiagnostics`        | Normal, Visual | Place a reference to every diagnostic in the current file or selection |
 | `:HerdrContextSendBuffersDiagnostics` | Normal, Visual | Place a reference to every diagnostic in the open files                |
 | `:checkhealth herdr-context`          | Any            | Check Neovim, Herdr, and the current Herdr environment                 |
 
-The selection command accepts the Ex range that Neovim creates after a Visual-mode selection.
+The buffer command accepts the Ex range that Neovim creates after a Visual-mode selection.
 
 ## Reference formats
 
@@ -225,7 +220,6 @@ require('herdr-context').setup({
   mappings = {
     buffer = '',
     buffers = '',
-    selection = '',
     diagnostics = '',
     buffers_diagnostics = '',
   },
@@ -234,13 +228,12 @@ require('herdr-context').setup({
 
 | Option                         | Mode           | Default  | Purpose                           |
 | ------------------------------ | -------------- | -------- | --------------------------------- |
-| `mappings.buffer`              | Normal         | Disabled | Call `send_buffer()`              |
+| `mappings.buffer`              | Normal, Visual | Disabled | Call `send_buffer()`              |
 | `mappings.buffers`             | Normal, Visual | Disabled | Call `send_buffers()`             |
-| `mappings.selection`           | Visual         | Disabled | Call `send_selection()`           |
 | `mappings.diagnostics`         | Normal, Visual | Disabled | Call `send_diagnostics()`         |
 | `mappings.buffers_diagnostics` | Normal, Visual | Disabled | Call `send_buffers_diagnostics()` |
 
-An empty string disables that mapping. Setup always creates all five user commands.
+An empty string disables that mapping. Setup always creates all four user commands.
 
 ## Lua API
 
@@ -251,13 +244,11 @@ herdr_context.setup({
   mappings = {
     buffer = '<leader>aa',
     buffers = '<leader>aA',
-    selection = '<leader>aa',
   },
 })
 
 herdr_context.send_buffer()
 herdr_context.send_buffers()
-herdr_context.send_selection()
 herdr_context.send_diagnostics()
 herdr_context.send_buffers_diagnostics()
 ```
@@ -265,9 +256,8 @@ herdr_context.send_buffers_diagnostics()
 | Function                     | Action                                                                  |
 | ---------------------------- | ----------------------------------------------------------------------- |
 | `setup(config)`              | Validate configuration, create commands, and create configured mappings |
-| `send_buffer()`              | Place a reference to the current saved file                             |
+| `send_buffer()`              | Place a reference to the current saved file or Visual selection         |
 | `send_buffers()`             | Place a reference to every open saved file                              |
-| `send_selection()`           | Place a reference to the current or most recent Visual selection        |
 | `send_diagnostics()`         | Place a reference to every diagnostic in the current file or selection  |
 | `send_buffers_diagnostics()` | Place a reference to every diagnostic in the open files                 |
 

@@ -47,7 +47,7 @@ vim.env.HERDR_TAB_ID = 'smoke-t'
 vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/README.md'))
 vim.bo.filetype = 'markdown'
 local mapping = 'gs'
-require('herdr-context').setup({ mappings = { selection = mapping } })
+require('herdr-context').setup({ mappings = { buffer = mapping } })
 
 vim.api.nvim_win_set_cursor(0, selection.last[1] == 1 and { 1, 0 } or { 3, 0 })
 vim.cmd('normal! ' .. vim.keycode(selection.key))

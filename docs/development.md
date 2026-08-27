@@ -100,9 +100,9 @@ notification, selected target, or public configuration instead.
 Run the working copy from a real Herdr pane:
 
 ```bash
-nvim --clean \
+nvim \
   --cmd "set runtimepath^=$PWD" \
-  --cmd "lua require('herdr-context').setup({ mappings = { buffer = 'gs', selection = 'gs' } })"
+  --cmd "lua require('herdr-context').setup({ mappings = { buffer = 'gs' } })"
 ```
 
 Then verify the user path:
@@ -180,5 +180,5 @@ just release <version> --push
 ```
 
 Pushing the tag starts `.github/workflows/release.yml`. It validates the tag against the changelog,
-checks formatting, tests Neovim 0.10.4 and stable, and creates a GitHub release after both test jobs
-pass.
+checks formatting, tests Neovim 0.10.4 and stable, and creates a GitHub release with the matching
+changelog section after both test jobs pass.

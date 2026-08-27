@@ -15,6 +15,15 @@ All notable changes to this project are documented in this file. The format foll
 - `mappings.diagnostics` and `mappings.buffers_diagnostics` bind the new commands in Normal and
   Visual mode.
 
+### Changed
+
+- `:HerdrContextSendBuffer` and `send_buffer()` send the Visual selection when one is active.
+- `mappings.buffer` now binds in Normal and Visual mode.
+
+### Removed
+
+- `:HerdrContextSendSelection`, `send_selection()`, and `mappings.selection`.
+
 ## [1.1.0] - 2026-08-26
 
 ### Added

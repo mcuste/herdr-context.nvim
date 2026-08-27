@@ -9,7 +9,6 @@ M.config = {
   mappings = {
     buffer = '',
     buffers = '',
-    selection = '',
     diagnostics = '',
     buffers_diagnostics = '',
   },
@@ -152,14 +151,14 @@ local function visual_context()
   return context.from_selection(0, mode, first, last)
 end
 
--- A nil result is not a failure here; it means the current buffer sends its whole file.
+-- A nil focus selects the whole current buffer.
 local function focus_context(opts)
   if visual_mode() ~= nil then return visual_context() end
   if type(opts) == 'table' and (opts.range or 0) > 0 then return context.from_selection(0) end
   return nil
 end
 
--- A diagnostic is placed as a line reference, so the selection must match the file on disk.
+-- Whole-line selections are references, so they require a saved buffer.
 local function saved_focus_context(opts)
   local focus, focus_error = focus_context(opts)
   if focus_error ~= nil then return nil, focus_error end
@@ -187,16 +186,12 @@ function M.setup(config)
   M.config = parse_config(config)
 
   vim.api.nvim_create_user_command('HerdrContextSendBuffer', M.send_buffer, {
-    desc = 'Send the current file to its Herdr agent',
-    force = true,
-  })
-  vim.api.nvim_create_user_command('HerdrContextSendBuffers', M.send_buffers, {
-    desc = 'Send every open file to its Herdr agent',
+    desc = 'Send the current file or visual selection to its Herdr agent',
     force = true,
     range = true,
   })
-  vim.api.nvim_create_user_command('HerdrContextSendSelection', M.send_selection, {
-    desc = 'Send the visual selection to its Herdr agent',
+  vim.api.nvim_create_user_command('HerdrContextSendBuffers', M.send_buffers, {
+    desc = 'Send every open file to its Herdr agent',
     force = true,
     range = true,
   })
@@ -212,7 +207,12 @@ function M.setup(config)
   })
 
   if M.config.mappings.buffer ~= '' then
-    vim.keymap.set('n', M.config.mappings.buffer, M.send_buffer, { desc = 'Send buffer to Herdr agent' })
+    vim.keymap.set(
+      { 'n', 'x' },
+      M.config.mappings.buffer,
+      M.send_buffer,
+      { desc = 'Send buffer or selection to Herdr agent' }
+    )
   end
   if M.config.mappings.buffers ~= '' then
     vim.keymap.set(
@@ -221,9 +221,6 @@ function M.setup(config)
       M.send_buffers,
       { desc = 'Send all open buffers to Herdr agent' }
     )
-  end
-  if M.config.mappings.selection ~= '' then
-    vim.keymap.set('x', M.config.mappings.selection, M.send_selection, { desc = 'Send selection to Herdr agent' })
   end
   if M.config.mappings.diagnostics ~= '' then
     vim.keymap.set(
@@ -243,8 +240,8 @@ function M.setup(config)
   end
 end
 
-function M.send_buffer()
-  local buffer_context, buffer_error = context.from_buffer(0)
+function M.send_buffer(opts)
+  local buffer_context, buffer_error = buffer_or_selection(opts)
   if buffer_context == nil then
     notify(buffer_error, vim.log.levels.WARN)
     return
@@ -268,16 +265,6 @@ function M.send_buffers(opts)
   warn_skipped(skipped)
 
   send_contexts(contexts)
-end
-
-function M.send_selection()
-  local selection_context, selection_error = visual_context()
-  if selection_context == nil then
-    notify(selection_error, vim.log.levels.WARN)
-    return
-  end
-
-  send_contexts({ selection_context })
 end
 
 function M.send_diagnostics(opts)

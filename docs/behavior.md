@@ -50,8 +50,8 @@ operation stops when no open file has a diagnostic.
 
 ### Visual selection
 
-`send_selection()` reads characterwise, linewise, and blockwise selections with Neovim's
-`getregion()` function. The line range is inclusive.
+`send_buffer()` reads characterwise, linewise, and blockwise selections with Neovim's `getregion()`
+function. The line range is inclusive.
 
 The selected shape decides what is placed:
 
@@ -79,8 +79,8 @@ return value
 The file must still exist on disk when a partial selection comes from a modified buffer. The path
 provides location and the fenced block provides the current text.
 
-When `send_selection()` runs outside Visual mode, it uses Neovim's most recent `'<` and `'>` marks.
-This is how `:'<,'>HerdrContextSendSelection` works after leaving Visual mode.
+When `send_buffer()` receives an Ex range, it uses Neovim's most recent `'<` and `'>` marks. This is
+how `:'<,'>HerdrContextSendBuffer` works after leaving Visual mode.
 
 ## Herdr location
 

@@ -1089,15 +1089,15 @@ end)
 test('setup creates the command without a default mapping', function()
   local plugin = require('herdr-context')
   plugin.setup()
+  assert_equal(vim.fn.exists(':HerdrContextSendBuffer'), 2)
+  assert_equal(vim.fn.exists(':HerdrContextSendSelection'), 0)
   assert_equal(plugin.config.mappings.buffer, '')
   assert_equal(plugin.config.mappings.buffers, '')
-  assert_equal(plugin.config.mappings.selection, '')
   assert_equal(plugin.config.mappings.diagnostics, '')
   assert_equal(plugin.config.mappings.buffers_diagnostics, '')
 
   plugin.setup({ mappings = { buffer = '<leader>ac' } })
   assert_equal(plugin.config.mappings.buffer, '<leader>ac')
-  assert_equal(plugin.config.mappings.selection, '')
   assert_equal(plugin.config.mappings.diagnostics, '')
   assert_equal(plugin.config.mappings.buffers_diagnostics, '')
 end)
@@ -1105,27 +1105,25 @@ end)
 test('setup registers configured normal and visual mappings', function()
   local plugin = require('herdr-context')
   local buffer_mapping = '<Plug>(herdr-context-test-buffer)'
-  local selection_mapping = '<Plug>(herdr-context-test-selection)'
   local diagnostics_mapping = '<Plug>(herdr-context-test-diagnostics)'
   local buffers_diagnostics_mapping = '<Plug>(herdr-context-test-buffers-diagnostics)'
 
   plugin.setup({
     mappings = {
       buffer = buffer_mapping,
-      selection = selection_mapping,
       diagnostics = diagnostics_mapping,
       buffers_diagnostics = buffers_diagnostics_mapping,
     },
   })
 
   assert_equal(vim.fn.maparg(buffer_mapping, 'n', false, true).lhs, buffer_mapping)
-  assert_equal(vim.fn.maparg(selection_mapping, 'x', false, true).lhs, selection_mapping)
+  assert_equal(vim.fn.maparg(buffer_mapping, 'x', false, true).lhs, buffer_mapping)
   assert_equal(vim.fn.maparg(diagnostics_mapping, 'n', false, true).lhs, diagnostics_mapping)
   assert_equal(vim.fn.maparg(diagnostics_mapping, 'x', false, true).lhs, diagnostics_mapping)
   assert_equal(vim.fn.maparg(buffers_diagnostics_mapping, 'n', false, true).lhs, buffers_diagnostics_mapping)
   assert_equal(vim.fn.maparg(buffers_diagnostics_mapping, 'x', false, true).lhs, buffers_diagnostics_mapping)
   vim.keymap.del('n', buffer_mapping)
-  vim.keymap.del('x', selection_mapping)
+  vim.keymap.del('x', buffer_mapping)
   vim.keymap.del('n', diagnostics_mapping)
   vim.keymap.del('x', diagnostics_mapping)
   vim.keymap.del('n', buffers_diagnostics_mapping)
