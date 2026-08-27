@@ -4,15 +4,17 @@ set -euo pipefail
 project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 session=${HERDR_CONTEXT_DEMO_SESSION:-herdr-context-demo}
 server_log="$project_root/docs/demo/.herdr-server.log"
-user_herdr_config=${HERDR_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/herdr/config.toml}
-if [[ -f $user_herdr_config ]]; then
-  export HERDR_CONFIG_PATH=$user_herdr_config
-fi
+omp_session_dir="$project_root/docs/demo/.omp-sessions"
+pi_session_dir="$project_root/docs/demo/.pi-sessions"
+demo_config=$project_root/docs/demo/herdr-config.toml
+export HERDR_CONFIG_PATH=${HERDR_CONTEXT_DEMO_CONFIG:-$demo_config}
 
 cleanup() {
   herdr session stop "$session" >/dev/null 2>&1 || true
   herdr session delete "$session" >/dev/null 2>&1 || true
   rm -f "$server_log"
+  rm -rf "$pi_session_dir"
+  rm -rf "$omp_session_dir"
 }
 
 json_value() {
@@ -75,10 +77,10 @@ start_demo() {
     --no-focus)
   agent_pane=$(printf '%s' "$split" | json_value "['result']['pane']['pane_id']")
 
-  start_agent "$agent_pane" omp omp OMP --no-session
+  start_agent "$agent_pane" omp omp OMP --session-dir "$omp_session_dir" --no-session
 
   herdr --session "$session" pane run "$root_pane" \
-    "nvim -n --cmd 'set runtimepath^=.' -c \"lua require('herdr-context').setup({ mappings = { buffer = 'gs', buffers = 'gS', selection = 'gs' } })\" docs/demo/context-example.lua docs/demo/context-helpers.lua"
+    "nvim -n --cmd 'set runtimepath^=.' -c \"lua dofile('docs/demo/demo-init.lua')\" docs/demo/context-example.lua docs/demo/context-helpers.lua"
   herdr --session "$session" pane wait-output "$root_pane" \
     --match 'herdr-context.nvim demo' \
     --timeout 10000 >/dev/null
@@ -100,7 +102,7 @@ add_picker_agent() {
     --no-focus)
   agent_pane=$(printf '%s' "$split" | json_value "['result']['pane']['pane_id']")
 
-  start_agent "$agent_pane" claude claude Claude
+  start_agent "$agent_pane" pi pi Pi --session-dir "$pi_session_dir" --no-session --no-extensions --no-skills
   herdr --session "$session" pane focus \
     --direction left \
     --pane "$source_pane" >/dev/null
@@ -111,7 +113,7 @@ schedule_picker_agent() {
   add_picker_agent "$1"
 }
 
-for command in bash claude herdr nvim omp python3; do
+for command in bash herdr nvim omp pi python3; do
   command -v "$command" >/dev/null || {
     printf 'Missing required command: %s\n' "$command" >&2
     exit 1

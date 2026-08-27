@@ -8,6 +8,7 @@ Set Theme "Catppuccin Mocha"
 Set CursorBlink false
 
 Env HERDR_CONTEXT_DEMO_SESSION "herdr-context-vhs"
+Env PATH "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 Hide
 Type "./docs/demo/start-herdr-context-demo.sh"
@@ -41,7 +42,7 @@ Sleep 1s
 Type "7G"
 Type "Vjj"
 Sleep 2s
-Type ":HerdrContextSendSelection"
+Type ":HerdrContextSendBuffer"
 Sleep 1s
 Enter
 Wait+Screen /#L7-9/
@@ -55,15 +56,24 @@ Type "3G0"
 Type "f'"
 Type "v8l"
 Sleep 2s
-Type ":HerdrContextSendSelection"
+Type ":HerdrContextSendBuffer"
 Sleep 1s
 Enter
 Wait+Screen /#L3-3/
 Sleep 3s
 
 Ctrl+C
+Ctrl+H
+Sleep 1s
+Type ":HerdrContextSendDiagnostics"
+Sleep 1s
+Enter
+Wait+Screen /ERROR unused greeting/
+Sleep 3s
+
+Ctrl+C
 Hide
-Wait+Screen@30s /Claude/
+Wait+Screen@30s /Pi/
 Sleep 1s
 Show
 Sleep 3s
@@ -73,7 +83,7 @@ Type ":HerdrContextSendBuffer"
 Sleep 1s
 Enter
 Sleep 2s
-Type@200ms "cl"
+Type@200ms "pi"
 Sleep 2s
 Enter
 Wait+Screen /@docs\/demo\/context-example.lua/
