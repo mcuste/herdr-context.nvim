@@ -50,10 +50,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check-version.py "${GITHUB_REF_NAME}" --notes > "$RUNNER_TEMP/release-notes.md"
       - env:
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "${GITHUB_REF_NAME}"
           --title "${GITHUB_REF_NAME}"
-          --generate-notes
+          --notes-file "$RUNNER_TEMP/release-notes.md"
