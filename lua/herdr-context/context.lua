@@ -1,3 +1,5 @@
+local diagnostics = require('herdr-context.diagnostics')
+
 local M = {}
 
 local function relative_to(file, cwd)
@@ -37,9 +39,8 @@ function M.from_buffer(buf)
   return context
 end
 
-function M.from_buffers(focus)
+local function each_listed_buffer(focus, visit)
   local current = vim.api.nvim_get_current_buf()
-  local contexts = {}
   local skipped = 0
 
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
@@ -49,10 +50,17 @@ function M.from_buffers(focus)
       if buffer_context == nil then
         skipped = skipped + 1
       else
-        table.insert(contexts, buffer_context)
+        visit(buf, buffer_context)
       end
     end
   end
+
+  return skipped
+end
+
+function M.from_buffers(focus)
+  local contexts = {}
+  local skipped = each_listed_buffer(focus, function(_, buffer_context) table.insert(contexts, buffer_context) end)
 
   return contexts, skipped
 end
@@ -93,6 +101,55 @@ function M.from_selection(buf, mode, first, last)
   if not context.whole_lines then context.selection = table.concat(lines, '\n') end
 
   return context
+end
+
+-- Returns one context for each diagnostic. Every diagnostic names the file and its lines, so the
+-- given context is not placed again.
+function M.with_diagnostics(buf, base)
+  buf = buf or 0
+  if base.modified then return nil, 'The current buffer has unsaved changes.' end
+
+  local first_line = base.range and base.start_line or nil
+  local last_line = base.range and base.end_line or nil
+  local items = diagnostics.collect(buf, first_line, last_line)
+  if #items == 0 then
+    if base.range then return nil, 'The visual selection has no diagnostics.' end
+    return nil, 'The current buffer has no diagnostics.'
+  end
+
+  local contexts = {}
+  for _, item in ipairs(items) do
+    table.insert(contexts, {
+      file = base.file,
+      range = true,
+      start_line = item.start_line,
+      end_line = item.end_line,
+      diagnostic = item.text,
+    })
+  end
+
+  return contexts
+end
+
+-- Every open saved file is followed by its own diagnostics. A file without one keeps its reference.
+function M.from_buffers_with_diagnostics(focus)
+  local contexts = {}
+  local reported = 0
+
+  local skipped = each_listed_buffer(focus, function(buf, buffer_context)
+    local expanded = M.with_diagnostics(buf, buffer_context)
+    if expanded == nil then
+      table.insert(contexts, buffer_context)
+      return
+    end
+
+    for _, buffer_diagnostic in ipairs(expanded) do
+      if buffer_diagnostic.diagnostic ~= nil then reported = reported + 1 end
+    end
+    vim.list_extend(contexts, expanded)
+  end)
+
+  return contexts, skipped, reported
 end
 
 function M.for_agent(context, cwd)

@@ -15,25 +15,32 @@ local function append_selection(prompt, context)
   return string.format('%s\n\n%s%s\n%s\n%s', prompt, fence, context.filetype or '', context.selection, fence)
 end
 
+local function append_diagnostic(prompt, context)
+  if context.diagnostic == nil then return prompt end
+  return string.format('%s%s ', prompt, context.diagnostic)
+end
+
+local function append_details(prompt, context) return append_selection(append_diagnostic(prompt, context), context) end
+
 local function format_generic_buffer(context)
   local reference = '@' .. context.relative_file
   local prompt = context.range and string.format(' %s Lines %d-%d. ', reference, context.start_line, context.end_line)
     or string.format(' %s ', reference)
-  return append_selection(prompt, context)
+  return append_details(prompt, context)
 end
 
 local function format_omp_buffer(context)
   local prompt = context.range
       and string.format(' @%s#L%d-%d ', context.relative_file, context.start_line, context.end_line)
     or string.format(' @%s ', context.relative_file)
-  return append_selection(prompt, context)
+  return append_details(prompt, context)
 end
 
 local function format_claude_buffer(context)
   local prompt = context.range
       and string.format(' @%s#%d-%d ', context.relative_file, context.start_line, context.end_line)
     or string.format(' @%s ', context.relative_file)
-  return append_selection(prompt, context)
+  return append_details(prompt, context)
 end
 
 local function format_codex_buffer(context)
@@ -41,7 +48,7 @@ local function format_codex_buffer(context)
   if path:find('%s') ~= nil and path:find('"', 1, true) == nil then path = string.format('"%s"', path) end
   local prompt = context.range and string.format(' %s Lines %d-%d. ', path, context.start_line, context.end_line)
     or string.format(' %s ', path)
-  return append_selection(prompt, context)
+  return append_details(prompt, context)
 end
 
 local OmpAdapter = { format = format_omp_buffer }

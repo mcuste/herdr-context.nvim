@@ -28,6 +28,26 @@ file. It stops and reports the reason when the selection itself is invalid, for 
 in a modified buffer. Without a selection, the current file sends a whole-file reference like the
 others.
 
+### Diagnostics
+
+`send_diagnostics()` places one line for each diagnostic. It reads them with `vim.diagnostic.get()`,
+so every source that publishes into Neovim counts.
+
+- Each line is a complete ranged reference. No file reference is placed, and a partial or block
+  selection does not add its fenced text.
+- A selection keeps only the diagnostics whose lines overlap it.
+- Unsaved changes are refused, because a line reference must match the file on disk.
+- No diagnostic stops the operation.
+- Lines are sorted by line, then severity, then message, so the same buffer always sends the same
+  text.
+
+### All open files with diagnostics
+
+`send_buffers_diagnostics()` uses the buffer list of `send_buffers()`. It places the diagnostics of
+each file in buffer order. A file with no diagnostic keeps its plain reference, so the file list
+stays complete. A selection in the current buffer limits that file to the selected lines. The
+operation stops when no open file has a diagnostic.
+
 ### Visual selection
 
 `send_selection()` reads characterwise, linewise, and blockwise selections with Neovim's
@@ -152,6 +172,17 @@ For `lua/plugin.lua`:
 Every reference starts and ends with one space. This prevents a new reference from joining text
 already present in the agent input. Codex paths that contain spaces are enclosed in double quotes.
 
+Each diagnostic adds its own line:
+
+```text
+ @lua/plugin.lua#L18-20 ERROR undefined global `value` [lua_ls undefined-global] 
+```
+
+The adapter formats the ranged reference. Then come the `vim.diagnostic.severity` name, the message
+joined into one line, and the source and code when Neovim has them.
+
+A range that ends at column 0 stops before that line, so the reference ends on the line above.
+
 Several files are placed as one text. The references use the same adapter and each file starts on
 its own line, so selected text stays with its own reference and a fenced code block cannot swallow
 the next one:
@@ -191,6 +222,7 @@ submits the prompt.
 | --- | --- | --- |
 | Invalid buffer, missing file, or disallowed unsaved changes | Warning | No Herdr command |
 | No open buffer saved on disk | Warning | No Herdr command |
+| No diagnostic in the buffer, the selection, or the open files | Warning | No Herdr command |
 | Invalid selection in the current buffer | Warning | No Herdr command |
 | Missing workspace or tab environment | Error | No Herdr command |
 | Agent list failure or invalid response | Error | No routing, placement, or focus |
@@ -210,6 +242,7 @@ All messages use `vim.notify` with the title `herdr-context.nvim`.
 - The plugin does not send a full file body. It sends a path reference.
 - The plugin does not send unlisted, unloaded, or unsaved buffers.
 - The plugin includes source text only for partial-line and block selections.
+- The plugin does not filter diagnostics by severity and does not run a linter.
 - The plugin does not start an agent when the workspace has none.
 - The plugin does not submit the target agent's input.
 - The plugin does not select a different workspace.

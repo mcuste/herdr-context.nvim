@@ -47,6 +47,79 @@ local function with_notification_capture(body)
   if not ok then error(err, 0) end
 end
 
+local diagnostics_namespace = vim.api.nvim_create_namespace('herdr-context-test')
+
+local function with_diagnostics(buf, items, body)
+  vim.diagnostic.set(diagnostics_namespace, buf, items)
+
+  local ok, err = xpcall(body, debug.traceback)
+  vim.diagnostic.reset(diagnostics_namespace, buf)
+  if not ok then error(err, 0) end
+end
+
+local function with_modified_selection(body)
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_set_lines(buf, 0, 1, false, { '# changed' })
+  vim.api.nvim_buf_set_mark(buf, '<', 1, 2, {})
+  vim.api.nvim_buf_set_mark(buf, '>', 1, 6, {})
+
+  local ok, err = xpcall(function() body(buf) end, debug.traceback)
+  vim.cmd('edit!')
+  vim.cmd('silent! %bwipeout!')
+  if not ok then error(err, 0) end
+end
+
+local function single_agent_stubs(record)
+  return {
+    list_agents = function(callback)
+      callback({
+        ok = true,
+        value = {
+          agents = {
+            { agent = 'omp', workspace_id = 'w1', tab_id = 't1', pane_id = 'w1:p1', foreground_cwd = vim.fn.getcwd() },
+          },
+        },
+      })
+    end,
+    send_text = function(_, text, callback)
+      record(text)
+      callback({ ok = true, value = {} })
+    end,
+    focus = function(_, callback) callback({ ok = true, value = {} }) end,
+  }
+end
+
+local function readme_diagnostics()
+  return {
+    { lnum = 1, col = 0, severity = vim.diagnostic.severity.INFO, message = 'stale badge', source = 'markdownlint' },
+  }
+end
+
+local function sample_diagnostics()
+  return {
+    {
+      lnum = 2,
+      col = 0,
+      end_lnum = 2,
+      end_col = 5,
+      severity = vim.diagnostic.severity.ERROR,
+      message = 'undefined global `value`',
+      source = 'lua_ls',
+      code = 'undefined-global',
+    },
+    {
+      lnum = 0,
+      col = 0,
+      severity = vim.diagnostic.severity.WARN,
+      message = 'unused\nvariable',
+      source = 'lua_ls',
+    },
+    { lnum = 3, col = 0, end_lnum = 4, end_col = 0, severity = vim.diagnostic.severity.HINT, message = 'block' },
+  }
+end
+
 local function with_ui_select(replacement, body)
   local original = vim.ui.select
   vim.ui.select = replacement
@@ -110,6 +183,30 @@ test('appends partial selection content after native ranges', function()
   assert_equal(adapters.get('omp').format(context), expected)
   context.selection = 'local ``` value'
   assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-18 \n\n````lua\nlocal ``` value\n````')
+end)
+
+test('appends diagnostic text after the reference', function()
+  local adapters = require('herdr-context.adapters')
+  local context = {
+    relative_file = 'lua/plugin.lua',
+    start_line = 18,
+    end_line = 20,
+    range = true,
+    diagnostic = 'ERROR undefined global `value` [lua_ls undefined-global]',
+  }
+
+  assert_equal(
+    adapters.get('omp').format(context),
+    ' @lua/plugin.lua#L18-20 ERROR undefined global `value` [lua_ls undefined-global] '
+  )
+  assert_equal(
+    adapters.get('claude').format(context),
+    ' @lua/plugin.lua#18-20 ERROR undefined global `value` [lua_ls undefined-global] '
+  )
+  assert_equal(
+    adapters.get('codex').format(context),
+    ' lua/plugin.lua Lines 18-20. ERROR undefined global `value` [lua_ls undefined-global] '
+  )
 end)
 
 test('puts every reference on its own line', function()
@@ -248,6 +345,146 @@ test('keeps modified partial content but rejects modified whole lines', function
   assert_equal(partial.modified, true)
   assert_equal(whole, nil)
   assert_equal(whole_error, 'The current buffer has unsaved changes.')
+end)
+
+test('sorts diagnostics by line and severity and shortens a multiline message', function()
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+
+  with_diagnostics(buf, sample_diagnostics(), function()
+    local items = require('herdr-context.diagnostics').collect(buf)
+    assert_equal(items, {
+      { start_line = 1, end_line = 1, severity = 2, text = 'WARN unused variable [lua_ls]' },
+      {
+        start_line = 3,
+        end_line = 3,
+        severity = 1,
+        text = 'ERROR undefined global `value` [lua_ls undefined-global]',
+      },
+      { start_line = 4, end_line = 4, severity = 4, text = 'HINT block' },
+    })
+  end)
+end)
+
+test('keeps only diagnostics that overlap a line range', function()
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+
+  with_diagnostics(buf, sample_diagnostics(), function()
+    local diagnostics = require('herdr-context.diagnostics')
+    assert_equal(vim.tbl_map(function(item) return item.start_line end, diagnostics.collect(buf, 3, 4)), { 3, 4 })
+    assert_equal(vim.tbl_map(function(item) return item.start_line end, diagnostics.collect(buf, 1, 1)), { 1 })
+    assert_equal(diagnostics.collect(buf, 2, 2), {})
+  end)
+end)
+
+test('formats a diagnostic with fallbacks for missing fields', function()
+  local text = require('herdr-context.diagnostics').text
+  local cases = {
+    {
+      input = {
+        severity = vim.diagnostic.severity.ERROR,
+        message = 'undefined global `value`',
+        source = 'lua_ls',
+        code = 'undefined-global',
+      },
+      expected = 'ERROR undefined global `value` [lua_ls undefined-global]',
+    },
+    {
+      input = { severity = vim.diagnostic.severity.ERROR, message = 'type mismatch', source = 'tsserver', code = 2345 },
+      expected = 'ERROR type mismatch [tsserver 2345]',
+    },
+    {
+      input = { severity = vim.diagnostic.severity.WARN, message = 'unused import', code = 'no-unused' },
+      expected = 'WARN unused import [no-unused]',
+    },
+    { input = { severity = vim.diagnostic.severity.INFO, message = 'no source' }, expected = 'INFO no source' },
+    { input = { message = 'no severity' }, expected = 'UNKNOWN no severity' },
+    { input = { severity = vim.diagnostic.severity.HINT }, expected = 'HINT ' },
+  }
+
+  for _, case in ipairs(cases) do
+    assert_equal(text(case.input), case.expected)
+  end
+end)
+
+test('orders diagnostics on one line by severity and then by message', function()
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+  local one_line = {
+    { lnum = 0, col = 0, severity = vim.diagnostic.severity.WARN, message = 'second warning' },
+    { lnum = 0, col = 0, severity = vim.diagnostic.severity.HINT, message = 'a hint' },
+    { lnum = 0, col = 0, severity = vim.diagnostic.severity.WARN, message = 'first warning' },
+  }
+
+  with_diagnostics(buf, one_line, function()
+    local items = require('herdr-context.diagnostics').collect(buf)
+    assert_equal(vim.tbl_map(function(item) return item.text end, items), {
+      'WARN first warning',
+      'WARN second warning',
+      'HINT a hint',
+    })
+  end)
+end)
+
+test('keeps a diagnostic that starts above the selected lines', function()
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+  local spanning = {
+    {
+      lnum = 1,
+      col = 0,
+      end_lnum = 3,
+      end_col = 8,
+      severity = vim.diagnostic.severity.ERROR,
+      message = 'unclosed block',
+    },
+  }
+
+  with_diagnostics(buf, spanning, function()
+    local diagnostics = require('herdr-context.diagnostics')
+    assert_equal(diagnostics.collect(buf, 3, 3), {
+      { start_line = 2, end_line = 4, severity = 1, text = 'ERROR unclosed block' },
+    })
+    assert_equal(diagnostics.collect(buf, 1, 1), {})
+  end)
+end)
+
+test('builds one context for each diagnostic and none for the file', function()
+  local context = require('herdr-context.context')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+
+  with_diagnostics(buf, sample_diagnostics(), function()
+    local contexts = context.with_diagnostics(buf, context.from_buffer(buf))
+    assert_equal(#contexts, 3)
+    assert_equal(contexts[1].file, selection_fixture)
+    assert_equal(contexts[1].range, true)
+    assert_equal(contexts[1].start_line, 1)
+    assert_equal(contexts[1].diagnostic, 'WARN unused variable [lua_ls]')
+  end)
+end)
+
+test('refuses diagnostics for an empty list and for unsaved changes', function()
+  local context = require('herdr-context.context')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+  local base = context.from_buffer(buf)
+
+  local empty, empty_error = context.with_diagnostics(buf, base)
+  assert_equal(empty, nil)
+  assert_equal(empty_error, 'The current buffer has no diagnostics.')
+
+  with_diagnostics(buf, sample_diagnostics(), function()
+    local selection, selection_error =
+      context.with_diagnostics(buf, context.from_selection(buf, 'V', { 2, 0 }, { 2, 0 }))
+    assert_equal(selection, nil)
+    assert_equal(selection_error, 'The visual selection has no diagnostics.')
+
+    local modified, modified_error = context.with_diagnostics(buf, vim.tbl_extend('force', base, { modified = true }))
+    assert_equal(modified, nil)
+    assert_equal(modified_error, 'The current buffer has unsaved changes.')
+  end)
 end)
 
 test('parses a Herdr agent list response into records', function()
@@ -553,6 +790,7 @@ test('does not send to a blocked agent', function()
   with_notification_capture(function(notifications)
     with_environment('w1', 't1', function() with_cli_stubs(stubs, plugin.send_buffer) end)
     assert_equal(notifications[1].message, 'The selected Herdr agent is blocked; no input was sent.')
+    assert_equal(notifications[1].level, vim.log.levels.WARN)
   end)
   assert_equal(text_called, false)
 end)
@@ -608,23 +846,7 @@ test('sends the current selection with the other open buffers', function()
   vim.bo.filetype = 'markdown'
 
   local sent
-  local stubs = {
-    list_agents = function(callback)
-      callback({
-        ok = true,
-        value = {
-          agents = {
-            { agent = 'omp', workspace_id = 'w1', tab_id = 't1', pane_id = 'w1:p1', foreground_cwd = vim.fn.getcwd() },
-          },
-        },
-      })
-    end,
-    send_text = function(_, text, callback)
-      sent = text
-      callback({ ok = true, value = {} })
-    end,
-    focus = function(_, callback) callback({ ok = true, value = {} }) end,
-  }
+  local stubs = single_agent_stubs(function(text) sent = text end)
 
   vim.api.nvim_win_set_cursor(0, { 1, 0 })
   vim.cmd('normal! v')
@@ -660,29 +882,254 @@ test('reports skipped buffers and refuses when none is saved', function()
   assert_equal(text_called, false)
 end)
 
+test('sends the file with every diagnostic below it', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+
+  local sent
+  local stubs = single_agent_stubs(function(text) sent = text end)
+
+  with_diagnostics(buf, sample_diagnostics(), function()
+    with_environment('w1', 't1', function() with_cli_stubs(stubs, plugin.send_diagnostics) end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(
+    sent,
+    ' @tests/fixtures/selection.md#L1-1 WARN unused variable [lua_ls] \n'
+      .. ' @tests/fixtures/selection.md#L3-3 ERROR undefined global `value` [lua_ls undefined-global] \n'
+      .. ' @tests/fixtures/selection.md#L4-4 HINT block '
+  )
+end)
+
+test('sends only the diagnostics inside the selection', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+
+  local sent
+  local stubs = single_agent_stubs(function(text) sent = text end)
+
+  local last_column = #vim.api.nvim_buf_get_lines(buf, 3, 4, false)[1] - 1
+  vim.api.nvim_buf_set_mark(buf, '<', 3, 0, {})
+  vim.api.nvim_buf_set_mark(buf, '>', 4, last_column, {})
+  with_diagnostics(buf, sample_diagnostics(), function()
+    with_environment('w1', 't1', function()
+      with_cli_stubs(stubs, function() plugin.send_diagnostics({ range = 2 }) end)
+    end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(
+    sent,
+    ' @tests/fixtures/selection.md#L3-3 ERROR undefined global `value` [lua_ls undefined-global] \n'
+      .. ' @tests/fixtures/selection.md#L4-4 HINT block '
+  )
+end)
+
+test('sends every open file with its own diagnostics below it', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  local readme = vim.fs.normalize(vim.fn.getcwd() .. '/README.md')
+  vim.cmd('edit ' .. vim.fn.fnameescape(readme))
+  local readme_buf = vim.api.nvim_get_current_buf()
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local fixture_buf = vim.api.nvim_get_current_buf()
+
+  local sent
+  local stubs = single_agent_stubs(function(text) sent = text end)
+
+  with_diagnostics(readme_buf, readme_diagnostics(), function()
+    with_diagnostics(fixture_buf, sample_diagnostics(), function()
+      with_environment('w1', 't1', function() with_cli_stubs(stubs, plugin.send_buffers_diagnostics) end)
+    end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(
+    sent,
+    ' @README.md#L2-2 INFO stale badge [markdownlint] \n'
+      .. ' @tests/fixtures/selection.md#L1-1 WARN unused variable [lua_ls] \n'
+      .. ' @tests/fixtures/selection.md#L3-3 ERROR undefined global `value` [lua_ls undefined-global] \n'
+      .. ' @tests/fixtures/selection.md#L4-4 HINT block '
+  )
+end)
+
+test('limits the selection to the current file and keeps every other file whole', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.normalize(vim.fn.getcwd() .. '/README.md')))
+  local readme_buf = vim.api.nvim_get_current_buf()
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local fixture_buf = vim.api.nvim_get_current_buf()
+
+  local sent
+  local stubs = single_agent_stubs(function(text) sent = text end)
+  local last_column = #vim.api.nvim_buf_get_lines(fixture_buf, 3, 4, false)[1] - 1
+  vim.api.nvim_buf_set_mark(fixture_buf, '<', 3, 0, {})
+  vim.api.nvim_buf_set_mark(fixture_buf, '>', 4, last_column, {})
+
+  with_diagnostics(readme_buf, readme_diagnostics(), function()
+    with_diagnostics(fixture_buf, sample_diagnostics(), function()
+      with_environment('w1', 't1', function()
+        with_cli_stubs(stubs, function() plugin.send_buffers_diagnostics({ range = 2 }) end)
+      end)
+    end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(
+    sent,
+    ' @README.md#L2-2 INFO stale badge [markdownlint] \n'
+      .. ' @tests/fixtures/selection.md#L3-3 ERROR undefined global `value` [lua_ls undefined-global] \n'
+      .. ' @tests/fixtures/selection.md#L4-4 HINT block '
+  )
+end)
+
+test('keeps a file without diagnostics in the all-files list', function()
+  local context = require('herdr-context.context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.normalize(vim.fn.getcwd() .. '/README.md')))
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  local buf = vim.api.nvim_get_current_buf()
+
+  local contexts, skipped, reported
+  with_diagnostics(buf, sample_diagnostics(), function()
+    contexts, skipped, reported = context.from_buffers_with_diagnostics()
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(skipped, 0)
+  assert_equal(reported, 3)
+  assert_equal(#contexts, 4)
+  assert_equal(contexts[1].range, nil)
+  assert_equal(contexts[1].diagnostic, nil)
+  assert_equal(contexts[2].diagnostic, 'WARN unused variable [lua_ls]')
+end)
+
+test('reports that no open buffer has diagnostics', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+
+  local text_called = false
+  with_notification_capture(function(notifications)
+    with_environment('w1', 't1', function()
+      with_cli_stubs({ send_text = function() text_called = true end }, plugin.send_buffers_diagnostics)
+    end)
+    assert_equal(notifications[1].message, 'No open buffer has diagnostics.')
+    assert_equal(notifications[1].level, vim.log.levels.WARN)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(text_called, false)
+end)
+
+test('refuses a diagnostics send when the selected buffer is modified', function()
+  local plugin = require('herdr-context')
+  local text_called = false
+
+  with_modified_selection(function()
+    with_notification_capture(function(notifications)
+      with_environment('w1', 't1', function()
+        with_cli_stubs(
+          { send_text = function() text_called = true end },
+          function() plugin.send_diagnostics({ range = 2 }) end
+        )
+      end)
+      assert_equal(notifications[1].message, 'The current buffer has unsaved changes.')
+      assert_equal(notifications[1].level, vim.log.levels.WARN)
+    end)
+  end)
+
+  assert_equal(text_called, false)
+end)
+
+test('refuses an all-files diagnostics send when the selected buffer is modified', function()
+  local plugin = require('herdr-context')
+  local text_called = false
+
+  with_modified_selection(function()
+    with_notification_capture(function(notifications)
+      with_environment('w1', 't1', function()
+        with_cli_stubs(
+          { send_text = function() text_called = true end },
+          function() plugin.send_buffers_diagnostics({ range = 2 }) end
+        )
+      end)
+      assert_equal(notifications[1].message, 'The current buffer has unsaved changes.')
+      assert_equal(notifications[1].level, vim.log.levels.WARN)
+    end)
+  end)
+
+  assert_equal(text_called, false)
+end)
+
+test('reports a buffer without diagnostics before any Herdr command', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+
+  local text_called = false
+  with_notification_capture(function(notifications)
+    with_environment('w1', 't1', function()
+      with_cli_stubs({ send_text = function() text_called = true end }, plugin.send_diagnostics)
+    end)
+    assert_equal(notifications[1].message, 'The current buffer has no diagnostics.')
+    assert_equal(notifications[1].level, vim.log.levels.WARN)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(text_called, false)
+end)
+
 test('setup creates the command without a default mapping', function()
   local plugin = require('herdr-context')
   plugin.setup()
   assert_equal(plugin.config.mappings.buffer, '')
   assert_equal(plugin.config.mappings.buffers, '')
   assert_equal(plugin.config.mappings.selection, '')
+  assert_equal(plugin.config.mappings.diagnostics, '')
+  assert_equal(plugin.config.mappings.buffers_diagnostics, '')
 
   plugin.setup({ mappings = { buffer = '<leader>ac' } })
   assert_equal(plugin.config.mappings.buffer, '<leader>ac')
   assert_equal(plugin.config.mappings.selection, '')
+  assert_equal(plugin.config.mappings.diagnostics, '')
+  assert_equal(plugin.config.mappings.buffers_diagnostics, '')
 end)
 
 test('setup registers configured normal and visual mappings', function()
   local plugin = require('herdr-context')
   local buffer_mapping = '<Plug>(herdr-context-test-buffer)'
   local selection_mapping = '<Plug>(herdr-context-test-selection)'
+  local diagnostics_mapping = '<Plug>(herdr-context-test-diagnostics)'
+  local buffers_diagnostics_mapping = '<Plug>(herdr-context-test-buffers-diagnostics)'
 
-  plugin.setup({ mappings = { buffer = buffer_mapping, selection = selection_mapping } })
+  plugin.setup({
+    mappings = {
+      buffer = buffer_mapping,
+      selection = selection_mapping,
+      diagnostics = diagnostics_mapping,
+      buffers_diagnostics = buffers_diagnostics_mapping,
+    },
+  })
 
   assert_equal(vim.fn.maparg(buffer_mapping, 'n', false, true).lhs, buffer_mapping)
   assert_equal(vim.fn.maparg(selection_mapping, 'x', false, true).lhs, selection_mapping)
+  assert_equal(vim.fn.maparg(diagnostics_mapping, 'n', false, true).lhs, diagnostics_mapping)
+  assert_equal(vim.fn.maparg(diagnostics_mapping, 'x', false, true).lhs, diagnostics_mapping)
+  assert_equal(vim.fn.maparg(buffers_diagnostics_mapping, 'n', false, true).lhs, buffers_diagnostics_mapping)
+  assert_equal(vim.fn.maparg(buffers_diagnostics_mapping, 'x', false, true).lhs, buffers_diagnostics_mapping)
   vim.keymap.del('n', buffer_mapping)
   vim.keymap.del('x', selection_mapping)
+  vim.keymap.del('n', diagnostics_mapping)
+  vim.keymap.del('x', diagnostics_mapping)
+  vim.keymap.del('n', buffers_diagnostics_mapping)
+  vim.keymap.del('x', buffers_diagnostics_mapping)
 end)
 
 test('rejects an invalid mapping before replacing configuration', function()

@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- `:HerdrContextSendDiagnostics` and `send_diagnostics()` send one ranged reference for every
+  diagnostic in the current file or in the Visual selection.
+- `:HerdrContextSendBuffersDiagnostics` and `send_buffers_diagnostics()` send the diagnostics of
+  every open saved file, and a plain reference for a file that has none.
+- `mappings.diagnostics` and `mappings.buffers_diagnostics` bind the new commands in Normal and
+  Visual mode.
+
 ## [1.1.0] - 2026-08-26
 
 ### Added

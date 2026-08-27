@@ -10,6 +10,8 @@ M.config = {
     buffer = '',
     buffers = '',
     selection = '',
+    diagnostics = '',
+    buffers_diagnostics = '',
   },
 }
 
@@ -157,6 +159,30 @@ local function focus_context(opts)
   return nil
 end
 
+-- A diagnostic is placed as a line reference, so the selection must match the file on disk.
+local function saved_focus_context(opts)
+  local focus, focus_error = focus_context(opts)
+  if focus_error ~= nil then return nil, focus_error end
+  if focus ~= nil and focus.modified then return nil, 'The current buffer has unsaved changes.' end
+
+  return focus
+end
+
+local function buffer_or_selection(opts)
+  local focus, focus_error = saved_focus_context(opts)
+  if focus_error ~= nil then return nil, focus_error end
+  if focus ~= nil then return focus end
+
+  return context.from_buffer(0)
+end
+
+local function warn_skipped(skipped)
+  if skipped == 0 then return end
+
+  local noun = skipped == 1 and 'buffer' or 'buffers'
+  notify(string.format('Skipped %d %s with unsaved changes or no file on disk.', skipped, noun), vim.log.levels.WARN)
+end
+
 function M.setup(config)
   M.config = parse_config(config)
 
@@ -174,6 +200,16 @@ function M.setup(config)
     force = true,
     range = true,
   })
+  vim.api.nvim_create_user_command('HerdrContextSendDiagnostics', M.send_diagnostics, {
+    desc = 'Send the current file and its diagnostics to its Herdr agent',
+    force = true,
+    range = true,
+  })
+  vim.api.nvim_create_user_command('HerdrContextSendBuffersDiagnostics', M.send_buffers_diagnostics, {
+    desc = 'Send every open file and its diagnostics to its Herdr agent',
+    force = true,
+    range = true,
+  })
 
   if M.config.mappings.buffer ~= '' then
     vim.keymap.set('n', M.config.mappings.buffer, M.send_buffer, { desc = 'Send buffer to Herdr agent' })
@@ -188,6 +224,22 @@ function M.setup(config)
   end
   if M.config.mappings.selection ~= '' then
     vim.keymap.set('x', M.config.mappings.selection, M.send_selection, { desc = 'Send selection to Herdr agent' })
+  end
+  if M.config.mappings.diagnostics ~= '' then
+    vim.keymap.set(
+      { 'n', 'x' },
+      M.config.mappings.diagnostics,
+      M.send_diagnostics,
+      { desc = 'Send diagnostics to Herdr agent' }
+    )
+  end
+  if M.config.mappings.buffers_diagnostics ~= '' then
+    vim.keymap.set(
+      { 'n', 'x' },
+      M.config.mappings.buffers_diagnostics,
+      M.send_buffers_diagnostics,
+      { desc = 'Send all open buffers and diagnostics to Herdr agent' }
+    )
   end
 end
 
@@ -213,11 +265,7 @@ function M.send_buffers(opts)
     notify('No open buffer is saved on disk.', vim.log.levels.WARN)
     return
   end
-  if skipped > 0 then
-    local noun = skipped == 1 and 'buffer' or 'buffers'
-    local message = string.format('Skipped %d %s with unsaved changes or no file on disk.', skipped, noun)
-    notify(message, vim.log.levels.WARN)
-  end
+  warn_skipped(skipped)
 
   send_contexts(contexts)
 end
@@ -230,6 +278,43 @@ function M.send_selection()
   end
 
   send_contexts({ selection_context })
+end
+
+function M.send_diagnostics(opts)
+  local base, base_error = buffer_or_selection(opts)
+  if base == nil then
+    notify(base_error, vim.log.levels.WARN)
+    return
+  end
+
+  local contexts, diagnostics_error = context.with_diagnostics(0, base)
+  if contexts == nil then
+    notify(diagnostics_error, vim.log.levels.WARN)
+    return
+  end
+
+  send_contexts(contexts)
+end
+
+function M.send_buffers_diagnostics(opts)
+  local focus, focus_error = saved_focus_context(opts)
+  if focus_error ~= nil then
+    notify(focus_error, vim.log.levels.WARN)
+    return
+  end
+
+  local contexts, skipped, reported = context.from_buffers_with_diagnostics(focus)
+  if #contexts == 0 then
+    notify('No open buffer is saved on disk.', vim.log.levels.WARN)
+    return
+  end
+  if reported == 0 then
+    notify('No open buffer has diagnostics.', vim.log.levels.WARN)
+    return
+  end
+  warn_skipped(skipped)
+
+  send_contexts(contexts)
 end
 
 return M

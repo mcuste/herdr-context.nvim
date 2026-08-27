@@ -105,6 +105,7 @@ with_notifications(function(notifications)
   vim.api.nvim_buf_set_lines(0, 0, 1, false, { '# unsaved' })
   vim.cmd('HerdrContextSendBuffer')
   assert_equal(notifications[1].message, 'The current buffer has unsaved changes.')
+  assert_equal(notifications[1].level, vim.log.levels.WARN)
   assert_equal(vim.fn.filereadable(log), 0)
   vim.cmd('edit!')
 end)
@@ -149,6 +150,69 @@ assert_equal(read_calls(3), {
   'agent|focus|smoke:p1|',
 })
 assert_equal(read_text(), ' @README.md#L1-1 \n\n```markdown\n# herdr\n```')
+
+local diagnostics_namespace = vim.api.nvim_create_namespace('herdr-context-smoke')
+vim.diagnostic.set(diagnostics_namespace, 0, {
+  {
+    lnum = 0,
+    col = 0,
+    severity = vim.diagnostic.severity.ERROR,
+    message = 'first line\nmust be a heading',
+    source = 'markdownlint',
+    code = 'MD041',
+  },
+  { lnum = 4, col = 0, severity = vim.diagnostic.severity.WARN, message = 'line is too long', source = 'markdownlint' },
+})
+vim.cmd('HerdrContextSendDiagnostics')
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(
+  read_text(),
+  ' @README.md#L1-1 ERROR first line must be a heading [markdownlint MD041] \n'
+    .. ' @README.md#L5-5 WARN line is too long [markdownlint] '
+)
+
+vim.api.nvim_buf_set_mark(0, '<', 1, 0, {})
+vim.api.nvim_buf_set_mark(0, '>', 1, 6, {})
+vim.cmd("'<,'>HerdrContextSendDiagnostics")
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' @README.md#L1-1 ERROR first line must be a heading [markdownlint MD041] ')
+
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/CHANGELOG.md'))
+vim.diagnostic.set(diagnostics_namespace, 0, {
+  { lnum = 6, col = 0, severity = vim.diagnostic.severity.HINT, message = 'empty section', source = 'changelog' },
+})
+vim.cmd('HerdrContextSendBuffersDiagnostics')
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(
+  read_text(),
+  ' @README.md#L1-1 ERROR first line must be a heading [markdownlint MD041] \n'
+    .. ' @README.md#L5-5 WARN line is too long [markdownlint] \n'
+    .. ' @CHANGELOG.md#L7-7 HINT empty section [changelog] '
+)
+vim.cmd('bwipeout!')
+
+with_notifications(function(notifications)
+  vim.diagnostic.reset(diagnostics_namespace, 0)
+  vim.cmd('HerdrContextSendBuffersDiagnostics')
+  assert_equal(notifications[1].message, 'No open buffer has diagnostics.')
+  assert_equal(notifications[1].level, vim.log.levels.WARN)
+  vim.cmd('HerdrContextSendDiagnostics')
+  assert_equal(notifications[2].message, 'The current buffer has no diagnostics.')
+  assert_equal(vim.fn.filereadable(log), 0)
+end)
+
 local labels
 local original_select = vim.ui.select
 vim.ui.select = function(choices, options, callback)
@@ -201,6 +265,7 @@ with_notifications(function(notifications)
     'pane|send-text|smoke:p1|<text>',
   })
   assert_equal(notifications[1].message, 'Could not place context in the agent input: could not place input')
+  assert_equal(notifications[1].level, vim.log.levels.ERROR)
 end)
 
 with_notifications(function(notifications)

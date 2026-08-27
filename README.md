@@ -9,10 +9,10 @@
 
 ![herdr-context.nvim demo](docs/demo/herdr-context-demo.gif)
 
-Send the current file, all open files, or a visual selection from Neovim to a coding agent in
-[Herdr](https://herdr.dev/), a terminal workspace for coding agents. One command finds the right
-agent, places the file references in its prompt using the syntax it expects, and focuses its pane.
-You can add to or change the prompt before submitting it.
+Send the current file, all open files, a visual selection, or the current diagnostics from Neovim to
+a coding agent in [Herdr](https://herdr.dev/), a terminal workspace for coding agents. One command
+finds the right agent, places the file references in its prompt using the syntax it expects, and
+focuses its pane. You can add to or change the prompt before submitting it.
 
 The plugin supports OMP, Pi, Claude Code, and Codex import syntax. It has no Neovim plugin
 dependencies and works with any `vim.ui.select` provider.
@@ -21,37 +21,80 @@ dependencies and works with any `vim.ui.select` provider.
 
 ![How herdr-context.nvim places a file reference](docs/diagrams/context-delivery.svg)
 
-Agent selection follows these steps:
+How automated agent picking works:
 
-1. Check the current Herdr tab.
-2. If the tab has one agent, select it automatically.
-3. Open `vim.ui.select` when the tab has several agents.
-4. Check the other tabs in the workspace when the current tab has no agents.
-5. If one workspace agent remains, select it automatically.
-6. Open `vim.ui.select` when several workspace agents remain.
-7. Notify the user and stop without changing any prompt when the workspace has no agents.
+<img src="docs/diagrams/agent-selection.svg" alt="Agent selection flow">
+
+Picking uses `vim.ui.select`. Tab preference is strict: if the only agent in your tab is blocked, the
+plugin refuses it and does not send to another tab.
 
 ### What is added to the prompt
 
-| What you send from Neovim | What the plugin adds | Why |
-| --- | --- | --- |
-| Current file | A file reference | The agent can read the complete file from disk |
-| All open files | One reference for each file | The agent can read every open file from disk |
-| One or more whole lines selected in Visual mode | A file reference with the inclusive start and end lines | The agent can read only that range from disk |
-| Part of a line or a block selection | A ranged file reference followed by the exact selected text in a fenced code block | Line numbers alone cannot describe the exact characters or block |
+The examples below use OMP syntax. Each agent has its own, see [Reference formats](#reference-formats).
 
-The all-files operation sends every listed buffer that is saved on disk, in buffer order. It skips
-buffers with unsaved changes and buffers without a file, and reports the number skipped. Started
-from Visual mode, it keeps the selection for the current file and sends the others whole.
+Current file:
 
-The current-file operation and whole-line Visual selections point to the version on disk. The plugin
-refuses them when the buffer has unsaved changes. A partial-line or block selection can
-include unsaved changes because its exact text is added to the prompt. The file must already exist
-on disk in every case.
+```text
+ @lua/plugin.lua
+```
 
-Before adding the text, the plugin makes the path relative to the selected agent's working directory
-when possible. It then formats the path and range using that agent's syntax. It does not add an
-instruction or submit the prompt.
+All open files:
+
+```text
+ @README.md
+ @lua/plugin.lua
+```
+
+Whole lines selected in Visual mode:
+
+```text
+ @lua/plugin.lua#L18-19
+```
+
+Part of a line, or a block selection. Line numbers cannot describe the exact characters, so the
+selected text comes with it:
+
+````text
+ @lua/plugin.lua#L18-19
+
+```lua
+local value = build()
+return value
+```
+````
+
+Current file and its diagnostics. A diagnostic already names the file and its lines, so no separate
+file reference is placed:
+
+```text
+ @lua/plugin.lua#L18-19 ERROR undefined global `value` [lua_ls undefined-global]
+ @lua/plugin.lua#L31-31 WARN unused variable [lua_ls]
+```
+
+A Visual selection and its diagnostics. Only the diagnostics in the selected lines are placed:
+
+```text
+ @lua/plugin.lua#L18-19 ERROR undefined global `value` [lua_ls undefined-global]
+```
+
+All open files and their diagnostics. A file without a diagnostic keeps its plain reference:
+
+```text
+ @README.md#L1-1 ERROR first line must be a heading [markdownlint MD041]
+ @lua/plugin.lua#L18-19 WARN unused variable [lua_ls]
+ @docs/behavior.md
+```
+
+Three rules cover the rest:
+
+- Save first. A reference points at the file on disk. The plugin refuses or skips a modified buffer.
+  A partial-line or block selection is the exception, because it sends the text itself. Diagnostics
+  always need a saved file.
+- Paths are shortened. An agent working in `/work/project` gets `@lua/plugin.lua`, not
+  `@/work/project/lua/plugin.lua`. A file outside the agent's directory keeps its full path.
+- Nothing else is added, and the prompt is never submitted.
+
+[Behavior and routing](docs/behavior.md) has the exact rules for every operation.
 
 ## Requirements
 
@@ -74,6 +117,8 @@ Run `:checkhealth herdr-context` after installation to check the first three req
       buffer = '<leader>aa',
       buffers = '<leader>aA',
       selection = '<leader>aa',
+      diagnostics = '<leader>ad',
+      buffers_diagnostics = '<leader>aD',
     },
   },
 }
@@ -93,6 +138,8 @@ later(function()
       buffer = '<leader>aa',
       buffers = '<leader>aA',
       selection = '<leader>aa',
+      diagnostics = '<leader>ad',
+      buffers_diagnostics = '<leader>aD',
     },
   })
 end)
@@ -108,23 +155,27 @@ later(function()
       buffer = '<leader>aa',
       buffers = '<leader>aA',
       selection = '<leader>aa',
+      diagnostics = '<leader>ad',
+      buffers_diagnostics = '<leader>aD',
     },
   })
 end)
 ```
 
 The `buffer` and `selection` mappings can use the same keys because one applies in Normal mode and
-the other in Visual mode. Give `buffers` its own key, because it applies in both modes. No mappings
-are created unless you configure them.
+the other in Visual mode. Give `buffers`, `diagnostics`, and `buffers_diagnostics` their own keys,
+because they apply in both modes. No mappings are created unless you configure them.
 
 ## Commands
 
-| Command | Mode | Action |
-| --- | --- | --- |
-| `:HerdrContextSendBuffer` | Normal | Place a reference to the current file |
-| `:HerdrContextSendBuffers` | Normal, Visual | Place a reference to every open file |
-| `:HerdrContextSendSelection` | Visual | Place a reference to the selected range |
-| `:checkhealth herdr-context` | Any | Check Neovim, Herdr, and the current Herdr environment |
+| Command                               | Mode           | Action                                                                 |
+| ------------------------------------- | -------------- | ---------------------------------------------------------------------- |
+| `:HerdrContextSendBuffer`             | Normal         | Place a reference to the current file                                  |
+| `:HerdrContextSendBuffers`            | Normal, Visual | Place a reference to every open file                                   |
+| `:HerdrContextSendSelection`          | Visual         | Place a reference to the selected range                                |
+| `:HerdrContextSendDiagnostics`        | Normal, Visual | Place a reference to every diagnostic in the current file or selection |
+| `:HerdrContextSendBuffersDiagnostics` | Normal, Visual | Place a reference to every diagnostic in the open files                |
+| `:checkhealth herdr-context`          | Any            | Check Neovim, Herdr, and the current Herdr environment                 |
 
 The selection command accepts the Ex range that Neovim creates after a Visual-mode selection.
 
@@ -134,15 +185,22 @@ The selected agent determines the reference syntax.
 
 For `lua/plugin.lua` and lines 18 through 42:
 
-| Agent | Whole file | Selected lines |
-| --- | --- | --- |
-| OMP | ` @lua/plugin.lua ` | ` @lua/plugin.lua#L18-42 ` |
-| Pi | ` @lua/plugin.lua ` | ` @lua/plugin.lua#L18-42 ` |
-| Claude Code | ` @lua/plugin.lua ` | ` @lua/plugin.lua#18-42 ` |
-| Codex | ` lua/plugin.lua ` | ` lua/plugin.lua Lines 18-42. ` |
-| Unknown agent type | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
+| Agent              | Whole file        | Selected lines                 |
+| ------------------ | ----------------- | ------------------------------ |
+| OMP                | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
+| Pi                 | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
+| Claude Code        | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
+| Codex              | `lua/plugin.lua`  | `lua/plugin.lua Lines 18-42.`  |
+| Unknown agent type | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 
-Codex paths that contain spaces are enclosed in double quotes. Each file starts on its own line.
+Diagnostics append severity, a one-line message, and reporting source and code when present:
+
+```text
+OMP / Pi:      @lua/plugin.lua#L18-42 ERROR undefined global `value` [lua_ls undefined-global]
+Claude Code:   @lua/plugin.lua#18-42 ERROR undefined global `value` [lua_ls undefined-global]
+Codex:         lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
+Unknown agent: @lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
+```
 
 ## Picker
 
@@ -168,17 +226,21 @@ require('herdr-context').setup({
     buffer = '',
     buffers = '',
     selection = '',
+    diagnostics = '',
+    buffers_diagnostics = '',
   },
 })
 ```
 
-| Option | Mode | Default | Purpose |
-| --- | --- | --- | --- |
-| `mappings.buffer` | Normal | Disabled | Call `send_buffer()` |
-| `mappings.buffers` | Normal, Visual | Disabled | Call `send_buffers()` |
-| `mappings.selection` | Visual | Disabled | Call `send_selection()` |
+| Option                         | Mode           | Default  | Purpose                           |
+| ------------------------------ | -------------- | -------- | --------------------------------- |
+| `mappings.buffer`              | Normal         | Disabled | Call `send_buffer()`              |
+| `mappings.buffers`             | Normal, Visual | Disabled | Call `send_buffers()`             |
+| `mappings.selection`           | Visual         | Disabled | Call `send_selection()`           |
+| `mappings.diagnostics`         | Normal, Visual | Disabled | Call `send_diagnostics()`         |
+| `mappings.buffers_diagnostics` | Normal, Visual | Disabled | Call `send_buffers_diagnostics()` |
 
-An empty string disables that mapping. Setup always creates all three user commands.
+An empty string disables that mapping. Setup always creates all five user commands.
 
 ## Lua API
 
@@ -196,28 +258,33 @@ herdr_context.setup({
 herdr_context.send_buffer()
 herdr_context.send_buffers()
 herdr_context.send_selection()
+herdr_context.send_diagnostics()
+herdr_context.send_buffers_diagnostics()
 ```
 
-| Function | Action |
-| --- | --- |
-| `setup(config)` | Validate configuration, create commands, and create configured mappings |
-| `send_buffer()` | Place a reference to the current saved file |
-| `send_buffers()` | Place a reference to every open saved file |
-| `send_selection()` | Place a reference to the current or most recent Visual selection |
+| Function                     | Action                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------- |
+| `setup(config)`              | Validate configuration, create commands, and create configured mappings |
+| `send_buffer()`              | Place a reference to the current saved file                             |
+| `send_buffers()`             | Place a reference to every open saved file                              |
+| `send_selection()`           | Place a reference to the current or most recent Visual selection        |
+| `send_diagnostics()`         | Place a reference to every diagnostic in the current file or selection  |
+| `send_buffers_diagnostics()` | Place a reference to every diagnostic in the open files                 |
 
 ## Failure behavior
 
 The plugin stops before each dependent action when something fails:
 
-| Failure | Result |
-| --- | --- |
-| Missing file, unsaved whole-file input, or unsaved whole lines | No Herdr command runs |
-| No open buffer saved on disk | No Herdr command runs |
-| Missing Herdr environment or failed agent list | No text is placed |
-| Failed tab list or cancelled picker | No text is placed |
-| Invalid or blocked target | No text is placed |
-| Failed `pane send-text` | The target is not focused |
-| Failed `agent focus` | The text remains in the target input and Neovim reports the focus error |
+| Failure                                                        | Result                                                                  |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Missing file, unsaved whole-file input, or unsaved whole lines | No Herdr command runs                                                   |
+| No open buffer saved on disk                                   | No Herdr command runs                                                   |
+| No diagnostic in the current file, selection, or open files    | No Herdr command runs                                                   |
+| Missing Herdr environment or failed agent list                 | No text is placed                                                       |
+| Failed tab list or cancelled picker                            | No text is placed                                                       |
+| Invalid or blocked target                                      | No text is placed                                                       |
+| Failed `pane send-text`                                        | The target is not focused                                               |
+| Failed `agent focus`                                           | The text remains in the target input and Neovim reports the focus error |
 
 The plugin does not write buffers, start agents, or press Enter in an agent pane.
 

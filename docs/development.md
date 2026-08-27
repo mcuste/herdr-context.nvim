@@ -6,6 +6,7 @@
 | --- | --- |
 | `lua/herdr-context/init.lua` | Public API, configuration, commands, mappings, and operation control |
 | `lua/herdr-context/context.lua` | File validation, Visual selection capture, and relative paths |
+| `lua/herdr-context/diagnostics.lua` | Diagnostic collection, line ranges, and one-line text |
 | `lua/herdr-context/router.lua` | Workspace and tab routing, target validation, and picker labels |
 | `lua/herdr-context/adapters.lua` | OMP, Pi, Claude Code, Codex, and generic reference formats |
 | `lua/herdr-context/cli.lua` | Herdr process calls and JSON response parsing |
@@ -24,7 +25,7 @@
 The public functions validate editor input before starting asynchronous Herdr work. The remaining
 operation follows the sequence in [Behavior and routing](behavior.md):
 
-1. `context.lua` creates a file or selection record.
+1. `context.lua` creates a file, selection, or diagnostic record.
 2. `cli.lua` lists agents through `vim.system`.
 3. `router.lua` limits the candidates to the current workspace and preferred tab.
 4. `vim.ui.select` chooses a target when several candidates remain.
@@ -68,8 +69,11 @@ and stable.
 installed copy of herdr-context.nvim cannot replace the working copy.
 
 `tests/run.lua` replaces process calls and picker calls in memory. It covers reference formatting,
-selection capture, CLI parsing, candidate choice, target validation, picker labels, setup, and the
-public send functions.
+selection capture, diagnostic collection, CLI parsing, candidate choice, target validation, picker
+labels, setup, and the public send functions.
+
+Diagnostic tests set records with `vim.diagnostic.set()` in a test namespace, so they need no
+language server.
 
 Selection tests open `tests/fixtures/selection.md` so README edits cannot change their input.
 

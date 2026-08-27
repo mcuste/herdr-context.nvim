@@ -80,4 +80,26 @@ assert_equal(read_calls(3), {
 assert_equal(read_text(), ' @README.md \n @CHANGELOG.md#L1-1 \n\n```markdown\n# Cha\n```')
 vim.keymap.del('n', buffers_mapping)
 vim.keymap.del('x', buffers_mapping)
+
+local diagnostics_mapping = 'gD'
+require('herdr-context').setup({ mappings = { diagnostics = diagnostics_mapping } })
+vim.diagnostic.set(vim.api.nvim_create_namespace('herdr-context-visual'), 0, {
+  { lnum = 0, col = 0, severity = vim.diagnostic.severity.ERROR, message = 'missing entry', source = 'changelog' },
+  { lnum = 3, col = 0, severity = vim.diagnostic.severity.WARN, message = 'empty section', source = 'changelog' },
+})
+vim.cmd('normal! ' .. vim.keycode('<Esc>'))
+vim.api.nvim_win_set_cursor(0, { 1, 0 })
+vim.cmd('normal! v')
+vim.api.nvim_win_set_cursor(0, { 1, 4 })
+assert_equal(vim.fn.mode(), 'v')
+vim.api.nvim_feedkeys(vim.keycode(diagnostics_mapping), 'mx', false)
+
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' @CHANGELOG.md#L1-1 ERROR missing entry [changelog] ')
+vim.keymap.del('n', diagnostics_mapping)
+vim.keymap.del('x', diagnostics_mapping)
 print('Visual selection smoke test passed')
