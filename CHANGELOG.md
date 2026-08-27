@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-27
+
 ### Added
 
 - `:HerdrContextSendDiagnostics` and `send_diagnostics()` send one ranged reference for every
