@@ -18,6 +18,8 @@ All notable changes to this project are documented in this file. The format foll
   it uses the generic format.
 - Kilo Code reference format. Its CLI is an opencode fork, so a range uses the `@file#18-42` syntax.
 - Kimi CLI reference format. It has no line range syntax, so it uses the generic format.
+- Every remaining agent kind that Herdr detects. None has a line range syntax, so they use the
+  generic format.
 - Gemini CLI and Qwen Code reference format. Neither has a line range syntax, and their paths
   escape every space and shell character with a backslash.
 

@@ -141,14 +141,9 @@ test('registers concrete adapters with a generic fallback', function()
   local expected = ' @plugin.lua '
   local context = { relative_file = 'plugin.lua' }
 
-  assert_equal(adapters.get('agy').format(context), expected)
   assert_equal(adapters.get('claude').format(context), expected)
-  assert_equal(adapters.get('copilot').format(context), expected)
-  assert_equal(adapters.get('cursor').format(context), expected)
   assert_equal(adapters.get('gemini').format(context), expected)
-  assert_equal(adapters.get('cline').format(context), expected)
   assert_equal(adapters.get('kilo').format(context), expected)
-  assert_equal(adapters.get('kimi').format(context), expected)
   assert_equal(adapters.get('omp').format(context), expected)
   assert_equal(adapters.get('opencode').format(context), expected)
   assert_equal(adapters.get('pi').format(context), expected)
@@ -178,20 +173,43 @@ test('formats native and fallback line ranges', function()
     range = true,
   }
 
-  assert_equal(adapters.get('agy').format(context), ' @lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('claude').format(context), ' @lua/plugin.lua#18-42 ')
   assert_equal(adapters.get('codex').format(context), ' lua/plugin.lua Lines 18-42. ')
-  assert_equal(adapters.get('copilot').format(context), ' @lua/plugin.lua Lines 18-42. ')
-  assert_equal(adapters.get('cursor').format(context), ' @lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('gemini').format(context), ' @lua/plugin.lua Lines 18-42. ')
-  assert_equal(adapters.get('cline').format(context), ' @lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('kilo').format(context), ' @lua/plugin.lua#18-42 ')
-  assert_equal(adapters.get('kimi').format(context), ' @lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-42 ')
   assert_equal(adapters.get('opencode').format(context), ' @lua/plugin.lua#18-42 ')
   assert_equal(adapters.get('pi').format(context), ' @lua/plugin.lua#L18-42 ')
   assert_equal(adapters.get('qwen').format(context), ' @lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('unknown').format(context), ' @lua/plugin.lua Lines 18-42. ')
+end)
+
+test('formats every agent without its own syntax through the generic style', function()
+  local adapters = require('herdr-context.adapters')
+  local kinds = {
+    'agy',
+    'amp',
+    'cline',
+    'copilot',
+    'cursor',
+    'devin',
+    'droid',
+    'grok',
+    'hermes',
+    'kimi',
+    'kiro',
+    'maki',
+    'mastracode',
+    'qodercli',
+  }
+
+  for _, kind in ipairs(kinds) do
+    assert_equal(adapters.get(kind).format({ relative_file = 'lua/plugin.lua' }), ' @lua/plugin.lua ')
+    assert_equal(
+      adapters.get(kind).format({ relative_file = 'lua/plugin.lua', start_line = 18, end_line = 42, range = true }),
+      ' @lua/plugin.lua Lines 18-42. '
+    )
+  end
 end)
 
 test('appends partial selection content after native ranges', function()

@@ -14,8 +14,8 @@ a coding agent in [Herdr](https://herdr.dev/), a terminal workspace for coding a
 finds the right agent, places the file references in its prompt using the syntax it expects, and
 focuses its pane. You can add to or change the prompt before submitting it.
 
-The plugin knows the reference syntax of the common coding agents and uses a generic format for the
-rest. It has no Neovim plugin dependencies and works with any `vim.ui.select` provider.
+The plugin supports every agent that Herdr detects, and places each reference with the syntax that
+agent expects. It has no Neovim plugin dependencies and works with any `vim.ui.select` provider.
 
 ## How it works
 
@@ -182,18 +182,27 @@ For `lua/plugin.lua` and lines 18 through 42:
 
 | Agent              | Whole file        | Selected lines                 |
 | ------------------ | ----------------- | ------------------------------ |
+| Amp                | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Antigravity        | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Claude Code        | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Cline              | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Codex              | `lua/plugin.lua`  | `lua/plugin.lua Lines 18-42.`  |
 | Copilot CLI        | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Cursor             | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Devin              | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Droid              | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Gemini CLI         | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Grok CLI           | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Hermes             | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Kilo Code          | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Kimi CLI           | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Kiro CLI           | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Maki               | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Mastra Code        | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | OMP                | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
 | opencode           | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Pi                 | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
+| Qoder CLI          | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Qwen Code          | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Unknown agent type | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 

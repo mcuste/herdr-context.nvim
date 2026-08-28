@@ -58,34 +58,52 @@ local function format_generic_style(context)
   return append_details(prompt, context)
 end
 
+local AmpAdapter = { format = format_generic_style }
 local AntigravityAdapter = { format = format_generic_style }
 local ClaudeAdapter = { format = format_claude_style }
 local ClineAdapter = { format = format_generic_style }
 local CodexAdapter = { format = format_codex_style }
 local CopilotAdapter = { format = format_generic_style }
 local CursorAdapter = { format = format_generic_style }
+local DevinAdapter = { format = format_generic_style }
+local DroidAdapter = { format = format_generic_style }
 local GeminiAdapter = { format = format_gemini_style }
+local GrokAdapter = { format = format_generic_style }
+local HermesAdapter = { format = format_generic_style }
 local KiloAdapter = { format = format_claude_style }
 local KimiAdapter = { format = format_generic_style }
+local KiroAdapter = { format = format_generic_style }
+local MakiAdapter = { format = format_generic_style }
+local MastracodeAdapter = { format = format_generic_style }
 local OmpAdapter = { format = format_pi_style }
 local OpencodeAdapter = { format = format_claude_style }
 local PiAdapter = { format = format_pi_style }
+local QodercliAdapter = { format = format_generic_style }
 local QwenAdapter = { format = format_gemini_style }
 local GenericAdapter = { format = format_generic_style }
 
 M.registry = {
   agy = AntigravityAdapter,
+  amp = AmpAdapter,
   claude = ClaudeAdapter,
   cline = ClineAdapter,
   codex = CodexAdapter,
   copilot = CopilotAdapter,
   cursor = CursorAdapter,
+  devin = DevinAdapter,
+  droid = DroidAdapter,
   gemini = GeminiAdapter,
+  grok = GrokAdapter,
+  hermes = HermesAdapter,
   kilo = KiloAdapter,
   kimi = KimiAdapter,
+  kiro = KiroAdapter,
+  maki = MakiAdapter,
+  mastracode = MastracodeAdapter,
   omp = OmpAdapter,
   opencode = OpencodeAdapter,
   pi = PiAdapter,
+  qodercli = QodercliAdapter,
   qwen = QwenAdapter,
   generic = GenericAdapter,
 }
