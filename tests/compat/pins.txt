@@ -1,0 +1,6 @@
+# name repository commit
+nvim-notify https://github.com/rcarriga/nvim-notify 8701bece920b38ea289b457f902e2ad184131a5d
+mini.nvim https://github.com/echasnovski/mini.nvim fb2bbae327f3c306f3c825031345b89dd176ce60
+snacks.nvim https://github.com/folke/snacks.nvim 882c996cf28183f4d63640de0b4c02ec886d01f2
+noice.nvim https://github.com/folke/noice.nvim 7bfd942445fb63089b59f97ca487d605e715f155
+nui.nvim https://github.com/MunifTanjim/nui.nvim 10fc361835c856ba4233ef5ea135b919bf3dce97

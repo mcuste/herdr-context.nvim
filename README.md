@@ -10,10 +10,10 @@
 ![herdr-context.nvim demo](docs/demo/herdr-context-demo.gif)
 
 Send the current file, all open files, a visual selection, the current diagnostics, a quickfix list,
-or Neovim's message history to a coding agent in [Herdr](https://herdr.dev/), a terminal workspace
-for coding agents. One command finds the right agent, places the context in its prompt, and focuses
-its pane. File references use the syntax that the selected agent expects. You can add to or change
-the prompt before submitting it.
+or message and notification histories to a coding agent in [Herdr](https://herdr.dev/), a terminal
+workspace for coding agents. One command finds the right agent, places the context in its prompt, and
+focuses its pane. File references use the syntax that the selected agent expects. You can add to or
+change the prompt before submitting it.
 
 The plugin supports every agent that Herdr detects. It has no Neovim plugin dependencies and works
 with any `vim.ui.select` provider.
@@ -94,7 +94,7 @@ The quickfix list or the location list. Each entry keeps its own text:
  @README.md#L3-3 send the value
 ```
 
-Neovim's `:messages` history:
+Message and notification history:
 
 ````text
  Neovim messages:
@@ -114,8 +114,9 @@ These rules cover file references:
   `@/work/project/lua/plugin.lua`. A file outside the agent's directory keeps its full path.
 - No extra file context is added.
 
-Message history is read from `:messages` and placed in a fenced text block. Every operation leaves
-the prompt unsubmitted.
+The command always reads `:messages`. Active nvim-notify, mini.notify, Snacks.notifier, and
+noice.nvim backends add retained notifications in labelled sections. Every operation leaves the prompt
+unsubmitted.
 
 [Behavior and routing](docs/behavior.md) has the exact rules for every operation.
 
@@ -208,7 +209,7 @@ created unless you configure them.
 | `:HerdrContextSendQuickfix`           | Normal, Visual | Place a reference to each quickfix entry, up to `quickfix.limit`       |
 | `:HerdrContextSendQuickfixAll`        | Normal, Visual | Place a reference to each quickfix entry, with no limit                |
 | `:HerdrContextSendLoclist`            | Normal, Visual | Place a reference to each entry in the window location list            |
-| `:HerdrContextSendMessages`           | Normal, Visual | Place Neovim's `:messages` history in a fenced text block               |
+| `:HerdrContextSendMessages`           | Normal, Visual | Place message and notification histories in fenced text blocks         |
 | `:checkhealth herdr-context`          | Any            | Check Neovim, Herdr, and the current Herdr environment                 |
 
 The buffer command accepts the Ex range that Neovim creates after a Visual-mode selection. The list

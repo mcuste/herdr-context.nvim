@@ -1,0 +1,86 @@
+name: Notification plugin drift
+
+# Runs the compatibility tests against the default branches of nvim-notify,
+# mini.nvim, snacks.nvim and noice.nvim. This lane is not a pull request gate,
+# because an upstream change can turn it red without any change here.
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  latest:
+    name: Latest notification plugins
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v3
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          version: stable
+          neovim: true
+
+      - name: Install the default branches
+        run: |
+          just install-test-plugins latest | tee /tmp/plugin-commits.txt
+          {
+            echo '## Plugin commits'
+            echo '```'
+            cat /tmp/plugin-commits.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - id: compat
+        name: Run the compatibility tests
+        run: just compat latest
+
+      - name: Open or update the drift issue
+        if: failure() && steps.compat.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Notification plugin drift'
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const body = [
+              'The compatibility tests failed against the default branches of the notification plugins.',
+              '',
+              `Run: ${run}`,
+              '',
+              'Check the adapters in `lua/herdr-context/messages/`. Once they work again, run',
+              '`just compat latest` and `just update-test-plugin-pins` to move the pins.',
+            ].join('\n')
+
+            const open = await github.rest.issues.listForRepo({
+              ...context.repo,
+              state: 'open',
+              labels: 'plugin-drift',
+            })
+
+            if (open.data.length > 0) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: open.data[0].number, body })
+              return
+            }
+            await github.rest.issues.create({ ...context.repo, title, body, labels: ['plugin-drift'] })
+
+      - name: Close the drift issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const open = await github.rest.issues.listForRepo({
+              ...context.repo,
+              state: 'open',
+              labels: 'plugin-drift',
+            })
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issue.number,
+                body: 'The compatibility tests pass again against the default branches.',
+              })
+              await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed' })
+            }

@@ -7,7 +7,8 @@
 | `lua/herdr-context/init.lua` | Public API, configuration, commands, mappings, and operation control |
 | `lua/herdr-context/context.lua` | File validation, Visual selection capture, and relative paths |
 | `lua/herdr-context/diagnostics.lua` | Diagnostic collection, line ranges, and one-line text |
-| `lua/herdr-context/messages.lua` | Neovim message history collection and fenced text formatting |
+| `lua/herdr-context/messages.lua` | Neovim message history collection and notification formatting |
+| `lua/herdr-context/messages/*.lua` | One normalized history adapter for each external notification backend |
 | `lua/herdr-context/router.lua` | Workspace and tab routing, target validation, and picker labels |
 | `lua/herdr-context/adapters.lua` | OMP, Pi, Claude Code, Codex, and generic reference formats |
 | `lua/herdr-context/cli.lua` | Herdr process calls and JSON response parsing |
@@ -16,8 +17,13 @@
 | `tests/run.lua` | Deterministic behavior tests inside headless Neovim |
 | `tests/smoke.lua` | End-to-end command, failure, and health scenarios against the fixture CLI |
 | `tests/visual.lua` | A real Visual-mode mapping scenario against the fixture CLI |
+| `tests/harness.lua` | Runs one test file and makes Neovim exit nonzero when it fails |
+| `tests/compat/*.lua` | Compatibility tests against the real notification plugins |
+| `tests/compat/pins.txt` | Plugin repositories and pinned commits for the compatibility tests |
 | `tests/fixtures/herdr` | Deterministic replacement for the Herdr executable |
 | `tests/fixtures/selection.md` | Stable file content for selection tests |
+| `scripts/install-test-plugins.sh` | Clones the notification plugins used by the compatibility tests |
+| `scripts/update-test-plugin-pins.sh` | Moves the pins to the checked out plugin commits |
 | `scripts/release.py` | Release checks, changelog update, commit, tag, and optional push |
 | `scripts/check-version.py` | Release tag and changelog validation in GitHub Actions |
 
@@ -26,13 +32,14 @@
 The public functions validate editor input before starting asynchronous Herdr work. The remaining
 operation follows the sequence in [Behavior and routing](behavior.md):
 
-1. `context.lua` creates file-based records, or `messages.lua` collects Neovim's message history.
+1. `context.lua` creates file-based records, or `messages.lua` collects message and notification history.
 2. `cli.lua` lists agents through `vim.system`.
 3. `router.lua` limits the candidates to the current workspace and preferred tab.
 4. `vim.ui.select` chooses a target when several candidates remain.
 5. `adapters.lua` formats file-based context for the selected agent.
 6. `cli.lua` places the text in the pane.
 7. `cli.lua` focuses the pane after successful placement.
+
 
 Each callback returns immediately after an error. A failed earlier operation must not start a later
 one. In particular, text placement must succeed before focus starts.
@@ -41,6 +48,13 @@ The CLI parser checks every Herdr response before another module uses it. Succes
 must contain lists with valid records. Failed responses prefer Herdr's structured error message and
 otherwise use stderr or a fixed fallback. Text-placement and focus commands accept successful empty
 output because current Herdr versions do not need to return a body.
+
+### Notification source adapters
+
+Each module below `messages/` owns one external notification API. Its `collect()` function detects an
+already loaded backend, reads only that backend's history, and normalizes records to `message`,
+`level`, and `title`. It returns an empty list after an unavailable or failing API. `messages.lua`
+has no backend field access. Update only the affected source adapter when a plugin API changes.
 
 ## Commands
 
@@ -51,6 +65,8 @@ just format-check
 just test
 just smoke
 just verify
+just compat
+just compat latest
 ```
 
 | Command | Purpose |
@@ -60,6 +76,13 @@ just verify
 | `just test` | Run deterministic module and operation tests in headless Neovim |
 | `just smoke` | Run fixture-backed command, Visual-mode, failure, and health scenarios |
 | `just verify` | Run the formatting check and both test suites |
+| `just install-test-plugins [mode]` | Clone the notification plugins into `.test-plugins/` |
+| `just compat [mode]` | Run the notification plugin compatibility tests |
+| `just update-test-plugin-pins` | Move the pins to the commits in `.test-plugins/` |
+
+`mode` is `pinned` (default) or `latest`. `pinned` checks out the commits in `tests/compat/pins.txt`.
+`latest` checks out the default branch of each plugin. `just compat` needs network access, so it is
+not part of `just verify`.
 
 `NVIM=/path/to/nvim just verify` selects another Neovim binary. CI uses this to cover Neovim 0.10
 and stable.
@@ -68,6 +91,10 @@ and stable.
 
 `tests/minimal_init.lua` adds the repository to `runtimepath`. The suites run with `--noplugin`, so an
 installed copy of herdr-context.nvim cannot replace the working copy.
+
+Every suite runs through `tests/harness.lua`, which reads the test file from `HERDR_TEST_FILE`. Neovim
+exits with status 0 after an error in a `-c` command, so the harness catches the error and calls
+`cquit 1`. Without it a failing suite would still pass in CI.
 
 `tests/run.lua` replaces process calls and picker calls in memory. It covers reference formatting,
 selection capture, diagnostic collection, CLI parsing, candidate choice, target validation, picker
@@ -92,9 +119,48 @@ A new observable behavior should have one test at the lowest useful level:
 - Use `tests/run.lua` for deterministic data or callback behavior.
 - Use `tests/smoke.lua` when the result depends on a real `vim.system` process or health output.
 - Use `tests/visual.lua` only when Neovim mode and key handling are part of the behavior.
+- Use `tests/compat/` only when the behavior depends on an external plugin API.
 
 Do not assert source text or internal helper names. Assert the command order, placed text,
 notification, selected target, or public configuration instead.
+
+## Notification plugin compatibility tests
+
+`tests/run.lua` passes hand-built record shapes to the source adapters. Those tests cannot see an
+upstream API change, and `messages.lua` hides an adapter failure on purpose, so a changed API would
+silently drop a notification history. The compatibility tests close that gap.
+
+`just compat` starts one headless Neovim process per backend. Each process adds only the working tree
+and that backend's runtime paths, so the adapters cannot read another backend's history:
+
+| Test file | Runtime paths | Backend |
+| --- | --- | --- |
+| `tests/compat/nvim_notify.lua` | `nvim-notify` | `require('notify')` |
+| `tests/compat/mini_notify.lua` | `mini.nvim` | `MiniNotify` |
+| `tests/compat/snacks_notifier.lua` | `snacks.nvim` | `Snacks.notifier` |
+| `tests/compat/noice.lua` | `noice.nvim`, `nui.nvim` | `noice.message.manager` |
+| `tests/compat/send.lua` | `mini.nvim` | `send_messages()` against the fixture CLI |
+
+Each test configures the real plugin, emits one warning with a title and two marked lines, then waits
+for `messages.collect()` to return a labelled fenced section holding both lines. `tests/compat/shared.lua`
+polls the collected output with `vim.wait()`, so no test sleeps. The per-backend tests stop at
+`messages.collect()`. `tests/compat/send.lua` covers the whole send path once.
+
+Noice is the least stable adapter, because it reads `noice.message.manager` and each message's
+`content()` from an internal module path. Run `just compat latest` before trusting an adapter change.
+
+The pins keep the pull request lane deterministic. Without them an unrelated upstream commit could
+fail a pull request that changed nothing, and no one could merge until someone fixed an external
+plugin. The `latest` lane answers the other question, whether upstream moved, and stays outside the
+gate for the same reason.
+
+Move the pins after an adapter works against a newer plugin version. Nothing moves them
+automatically:
+
+```bash
+just compat latest
+just update-test-plugin-pins
+```
 
 ## Testing inside Herdr
 
@@ -141,11 +207,17 @@ Preserve the selected text after the reference when `context.selection` is prese
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. It checks StyLua formatting
-and runs `just test` plus `just smoke` against Neovim 0.10.4 and stable.
+`.github/workflows/ci.yml` runs on pushes to `main` and on pull requests. It checks StyLua formatting,
+runs `just test` plus `just smoke`, and runs `just compat pinned` against Neovim 0.10.4 and stable.
+The pinned commits make this lane reproducible, so it can gate pull requests.
 
-The workflow has read-only repository permissions. Tests use the fixture Herdr executable and do not
-need a live Herdr workspace.
+`.github/workflows/compat-latest.yml` runs `just compat latest` every day and on manual dispatch,
+against current Neovim stable. An upstream change can turn it red without any change here, so it is
+not a pull request gate. On failure it opens or comments on an issue labelled `plugin-drift`, and it
+closes that issue after the tests pass again. It does not change the pins and opens no pull request.
+This lane needs `issues: write`.
+
+Both workflows use the fixture Herdr executable and do not need a live Herdr workspace.
 
 ## Release
 

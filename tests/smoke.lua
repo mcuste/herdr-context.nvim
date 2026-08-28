@@ -134,7 +134,7 @@ vim.cmd('messages clear')
 vim.cmd('bwipeout!')
 with_notifications(function(notifications)
   vim.cmd('HerdrContextSendMessages')
-  assert_equal(notifications[1].message, "Neovim's message history is empty.")
+  assert_equal(notifications[1].message, 'No Neovim messages or notification history is available.')
   assert_equal(notifications[1].level, vim.log.levels.WARN)
   assert_equal(vim.fn.filereadable(log), 0)
 end)
@@ -329,7 +329,10 @@ with_notifications(function(notifications)
     'agent|list||',
     'pane|send-text|smoke:p1|<text>',
   })
-  assert_equal(notifications[1].message, 'Could not place Neovim messages in the agent input: could not place input')
+  assert_equal(
+    notifications[1].message,
+    'Could not place message and notification history in the agent input: could not place input'
+  )
   assert_equal(notifications[1].level, vim.log.levels.ERROR)
 end)
 vim.cmd('messages clear')

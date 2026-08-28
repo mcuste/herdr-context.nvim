@@ -76,8 +76,8 @@ local function herdr_location()
 end
 
 local function insert_text(text, target, kind)
-  local failure_subject = kind == 'context' and 'context' or 'Neovim messages'
-  local placed_subject = kind == 'context' and 'Context was placed' or 'Neovim messages were placed'
+  local failure_subject = kind == 'context' and 'context' or 'message and notification history'
+  local placed_subject = kind == 'context' and 'Context was placed' or 'Message and notification history was placed'
 
   cli.send_text(target.pane_id, text, function(text_result)
     if not text_result.ok then
@@ -256,7 +256,11 @@ local commands = {
   { name = 'HerdrContextSendQuickfix', action = 'send_quickfix', desc = 'the quickfix list' },
   { name = 'HerdrContextSendQuickfixAll', action = 'send_quickfix_all', desc = 'the whole quickfix list' },
   { name = 'HerdrContextSendLoclist', action = 'send_loclist', desc = 'the location list' },
-  { name = 'HerdrContextSendMessages', action = 'send_messages', desc = 'the Neovim message history' },
+  {
+    name = 'HerdrContextSendMessages',
+    action = 'send_messages',
+    desc = 'the Neovim message and notification histories',
+  },
 }
 
 local mappings = {
@@ -267,7 +271,11 @@ local mappings = {
   { name = 'quickfix', action = 'send_quickfix', desc = 'quickfix list' },
   { name = 'quickfix_all', action = 'send_quickfix_all', desc = 'whole quickfix list' },
   { name = 'loclist', action = 'send_loclist', desc = 'location list' },
-  { name = 'messages', action = 'send_messages', desc = 'Neovim message history' },
+  {
+    name = 'messages',
+    action = 'send_messages',
+    desc = 'Neovim message and notification histories',
+  },
 }
 
 function M.setup(config)

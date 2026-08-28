@@ -171,8 +171,9 @@ replaces the current configuration.
 
                                            *:HerdrContextSendMessages*
 :HerdrContextSendMessages ~
-    Place Neovim's |:messages| history in a fenced text block in a Herdr
-    agent's input. This operation does not require a file buffer.
+    Place Neovim's |:messages| history and active supported notification
+    histories in fenced text blocks in a Herdr agent's input. This operation
+    does not require a file buffer.
 
 All commands focus the selected agent after successful text placement. They
 never submit the input.
@@ -212,8 +213,9 @@ send_loclist()                       *herdr-context.send_loclist()*
     window that names a saved file.
 
 send_messages()                     *herdr-context.send_messages()*
-    Place Neovim's |:messages| history in a fenced text block. This operation
-    does not require a file buffer.
+    Place Neovim's |:messages| history and active supported notification
+    histories in fenced text blocks. This operation does not require a file
+    buffer.
 
 All operations are asynchronous after editor input has been validated.
 Failures are reported through |vim.notify()|.
@@ -322,12 +324,14 @@ list holds the results of one window, so |herdr-context.send_loclist()| has no
 limit. The operation stops when the list is empty or when no item names a file
 saved on disk.
 
-NEOVIM MESSAGES ~
+MESSAGES AND NOTIFICATIONS ~
 
-The messages operation reads the complete history shown by |:messages|. It
-places the history after `Neovim messages:` in a fenced `text` block. A longer
-fence is used when a message contains backticks. It stops when the history is
-empty.
+The messages operation reads the complete history shown by |:messages|. When
+active, nvim-notify, mini.notify, Snacks.notifier, and noice.nvim each add
+their retained notifications in a separate fenced `text` block. Noice includes
+only its `notify` events, so entries already read from |:messages| are not
+repeated. A longer fence is used when history contains backticks. The operation
+stops when every history is empty.
 
 ==============================================================================
 7. Agent routing                                       *herdr-context-routing*
@@ -429,7 +433,7 @@ The plugin stops before each dependent action:
 - An empty quickfix or location list runs no Herdr command.
 - A list without an entry saved on disk runs no Herdr command.
 - An invalid selection in the current buffer runs no Herdr command.
-- An empty Neovim message history runs no Herdr command.
+- Empty message and notification history runs no Herdr command.
 - Missing Herdr environment values run no Herdr command.
 - An agent-list failure stops routing, placement, and focus.
 - A tab-list failure stops the picker, placement, and focus.

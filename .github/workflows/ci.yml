@@ -38,3 +38,21 @@ jobs:
           neovim: true
       - run: just test
       - run: just smoke
+
+  compat:
+    name: Notification plugins Neovim ${{ matrix.neovim }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim:
+          - v0.10.4
+          - stable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: extractions/setup-just@v3
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          version: ${{ matrix.neovim }}
+          neovim: true
+      - run: just compat pinned

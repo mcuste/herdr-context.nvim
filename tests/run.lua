@@ -47,6 +47,32 @@ local function with_notification_capture(body)
   if not ok then error(err, 0) end
 end
 
+local function with_message_sources(sources, body)
+  local original_exec2 = vim.api.nvim_exec2
+  local original_nvim_notify = package.loaded.notify
+  local original_mini_notify = rawget(_G, 'MiniNotify')
+  local original_snacks = rawget(_G, 'Snacks')
+  local original_noice = package.loaded['noice.message.manager']
+
+  vim.api.nvim_exec2 = function(command, options)
+    assert_equal(command, 'messages')
+    assert_equal(options, { output = true })
+    return { output = sources.messages or '' }
+  end
+  package.loaded.notify = sources.nvim_notify
+  _G.MiniNotify = sources.mini_notify
+  _G.Snacks = sources.snacks
+  package.loaded['noice.message.manager'] = sources.noice
+
+  local ok, err = xpcall(body, debug.traceback)
+  vim.api.nvim_exec2 = original_exec2
+  package.loaded.notify = original_nvim_notify
+  _G.MiniNotify = original_mini_notify
+  _G.Snacks = original_snacks
+  package.loaded['noice.message.manager'] = original_noice
+  if not ok then error(err, 0) end
+end
+
 local diagnostics_namespace = vim.api.nvim_create_namespace('herdr-context-test')
 
 local function with_diagnostics(buf, items, body)
@@ -292,6 +318,114 @@ test('formats Neovim message history as fenced agent context', function()
   local formatted, format_error = messages.format(' \n')
   assert_equal(formatted, nil)
   assert_equal(format_error, "Neovim's message history is empty.")
+end)
+
+test('collects each notification backend independently', function()
+  local messages = require('herdr-context.messages')
+  local cases = {
+    {
+      sources = {
+        nvim_notify = {
+          history = function()
+            return {
+              {
+                message = { 'first nvim-notify line', 'second nvim-notify line' },
+                level = 'error',
+                title = { 'Build' },
+              },
+            }
+          end,
+        },
+      },
+      expected = ' nvim-notify notifications:\n\n```text\n[ERROR Build]\nfirst nvim-notify line\nsecond nvim-notify line\n``` ',
+    },
+    {
+      sources = {
+        mini_notify = {
+          get_all = function()
+            return {
+              [2] = { msg = 'mini info', level = 'INFO', ts_update = 2 },
+              [1] = { msg = 'mini warning', level = 'WARN', ts_update = 1 },
+            }
+          end,
+        },
+      },
+      expected = ' mini.notify notifications:\n\n```text\n[WARN]\nmini warning\n\n[INFO]\nmini info\n``` ',
+    },
+    {
+      sources = {
+        snacks = {
+          notifier = {
+            get_history = function() return { { msg = 'Snacks error', level = 'error', title = 'Snacks' } } end,
+          },
+        },
+      },
+      expected = ' Snacks.notifier notifications:\n\n```text\n[ERROR Snacks]\nSnacks error\n``` ',
+    },
+    {
+      sources = {
+        noice = {
+          get = function(filter, options)
+            assert_equal(filter, { event = 'notify' })
+            assert_equal(options, { history = true, sort = true })
+            return {
+              {
+                content = function() return 'Noice notification' end,
+                level = vim.log.levels.INFO,
+                title = 'Noice',
+              },
+            }
+          end,
+        },
+      },
+      expected = ' noice.nvim notifications:\n\n```text\n[INFO Noice]\nNoice notification\n``` ',
+    },
+  }
+
+  for _, case in ipairs(cases) do
+    with_message_sources(case.sources, function() assert_equal(messages.collect(), case.expected) end)
+  end
+end)
+
+test('stops when every message and notification history is empty', function()
+  local messages = require('herdr-context.messages')
+  with_message_sources({}, function()
+    local history, history_error = messages.collect()
+    assert_equal(history, nil)
+    assert_equal(history_error, 'No Neovim messages or notification history is available.')
+  end)
+end)
+
+test('keeps available notification histories when another backend fails', function()
+  local messages = require('herdr-context.messages')
+  with_message_sources(
+    {
+      nvim_notify = {
+        history = function() error('nvim-notify history failed') end,
+      },
+      mini_notify = {
+        get_all = function() return { { msg = 'mini notification', level = 'INFO', ts_update = 1 } } end,
+      },
+    },
+    function()
+      assert_equal(messages.collect(), ' mini.notify notifications:\n\n```text\n[INFO]\nmini notification\n``` ')
+    end
+  )
+end)
+
+test('sends notification history to Herdr', function()
+  local plugin = require('herdr-context')
+  local sent
+  with_message_sources({
+    mini_notify = {
+      get_all = function() return { { msg = 'mini notification', level = 'INFO', ts_update = 1 } } end,
+    },
+  }, function()
+    with_environment('w1', 't1', function()
+      with_cli_stubs(single_agent_stubs(function(text) sent = text end), plugin.send_messages)
+    end)
+  end)
+  assert_equal(sent, ' mini.notify notifications:\n\n```text\n[INFO]\nmini notification\n``` ')
 end)
 
 test('appends diagnostic text after the reference', function()

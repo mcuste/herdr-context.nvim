@@ -74,12 +74,13 @@ Each item becomes one ranged reference followed by the item text:
   list. A location list holds the results of one window, so `send_loclist()` has no limit.
 - An empty list stops the operation.
 
-### Neovim messages
+### Messages and notifications
 
-`send_messages()` reads the complete history shown by `:messages`. It places the history after
-`Neovim messages:` in a fenced `text` block. If the history contains backticks, the plugin uses a
-longer fence so a message cannot close it. The operation does not require a file buffer and stops
-before any Herdr command when the history is empty.
+`send_messages()` always reads the complete `:messages` history. Active nvim-notify, mini.notify,
+Snacks.notifier, and noice.nvim backends add their retained notifications in separate fenced sections.
+Noice contributes only its `notify` events, so its captured Neovim messages do not repeat the
+`:messages` section. The operation does not require a file buffer and stops before any Herdr command
+when every history is empty.
 
 ### Visual selection
 
@@ -280,7 +281,7 @@ submits the prompt.
 | No open buffer saved on disk | Warning | No Herdr command |
 | No diagnostic in the buffer, the selection, or the open files | Warning | No Herdr command |
 | Empty quickfix or location list | Warning | No Herdr command |
-| Empty Neovim message history | Warning | No Herdr command |
+| Empty message and notification history | Warning | No Herdr command |
 | No list entry saved on disk | Warning | No Herdr command |
 | Invalid selection in the current buffer | Warning | No Herdr command |
 | Missing workspace or tab environment | Error | No Herdr command |
