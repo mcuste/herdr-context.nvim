@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-08-28
+
 ### Added
 
 - opencode reference format. A selected range uses the `@file#18-42` syntax that the opencode
