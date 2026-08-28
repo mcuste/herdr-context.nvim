@@ -37,6 +37,13 @@ local function format_codex_style(context)
   return append_details(prompt, context)
 end
 
+local function format_gemini_style(context)
+  local path = context.relative_file:gsub('[ \t%(%)%[%]{};%?!,]', '\\%0')
+  local prompt = context.range and string.format(' @%s Lines %d-%d. ', path, context.start_line, context.end_line)
+    or string.format(' @%s ', path)
+  return append_details(prompt, context)
+end
+
 local function format_pi_style(context)
   local prompt = context.range
       and string.format(' @%s#L%d-%d ', context.relative_file, context.start_line, context.end_line)
@@ -55,9 +62,11 @@ local AntigravityAdapter = { format = format_generic_style }
 local ClaudeAdapter = { format = format_claude_style }
 local CodexAdapter = { format = format_codex_style }
 local CursorAdapter = { format = format_generic_style }
+local GeminiAdapter = { format = format_gemini_style }
 local OmpAdapter = { format = format_pi_style }
 local OpencodeAdapter = { format = format_claude_style }
 local PiAdapter = { format = format_pi_style }
+local QwenAdapter = { format = format_gemini_style }
 local GenericAdapter = { format = format_generic_style }
 
 M.registry = {
@@ -65,9 +74,11 @@ M.registry = {
   claude = ClaudeAdapter,
   codex = CodexAdapter,
   cursor = CursorAdapter,
+  gemini = GeminiAdapter,
   omp = OmpAdapter,
   opencode = OpencodeAdapter,
   pi = PiAdapter,
+  qwen = QwenAdapter,
   generic = GenericAdapter,
 }
 

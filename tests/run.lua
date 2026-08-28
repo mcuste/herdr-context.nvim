@@ -144,9 +144,19 @@ test('registers concrete adapters with a generic fallback', function()
   assert_equal(adapters.get('agy').format(context), expected)
   assert_equal(adapters.get('claude').format(context), expected)
   assert_equal(adapters.get('cursor').format(context), expected)
+  assert_equal(adapters.get('gemini').format(context), expected)
   assert_equal(adapters.get('omp').format(context), expected)
   assert_equal(adapters.get('opencode').format(context), expected)
   assert_equal(adapters.get('pi').format(context), expected)
+  assert_equal(adapters.get('qwen').format(context), expected)
+  assert_equal(
+    adapters.get('gemini').format({ relative_file = 'lua/my plugin (1).lua' }),
+    ' @lua/my\\ plugin\\ \\(1\\).lua '
+  )
+  assert_equal(
+    adapters.get('qwen').format({ relative_file = 'lua/my plugin (1).lua' }),
+    ' @lua/my\\ plugin\\ \\(1\\).lua '
+  )
   assert_equal(adapters.get('codex').format(context), ' plugin.lua ')
   assert_equal(adapters.get('codex').format({ relative_file = 'lua/my plugin.lua' }), ' "lua/my plugin.lua" ')
   assert_equal(adapters.get('unknown'), adapters.registry.generic)
@@ -168,9 +178,11 @@ test('formats native and fallback line ranges', function()
   assert_equal(adapters.get('claude').format(context), ' @lua/plugin.lua#18-42 ')
   assert_equal(adapters.get('codex').format(context), ' lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('cursor').format(context), ' @lua/plugin.lua Lines 18-42. ')
+  assert_equal(adapters.get('gemini').format(context), ' @lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-42 ')
   assert_equal(adapters.get('opencode').format(context), ' @lua/plugin.lua#18-42 ')
   assert_equal(adapters.get('pi').format(context), ' @lua/plugin.lua#L18-42 ')
+  assert_equal(adapters.get('qwen').format(context), ' @lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('unknown').format(context), ' @lua/plugin.lua Lines 18-42. ')
 end)
 

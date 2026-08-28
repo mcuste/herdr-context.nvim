@@ -186,19 +186,19 @@ For `lua/plugin.lua` and lines 18 through 42:
 | Claude Code        | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Codex              | `lua/plugin.lua`  | `lua/plugin.lua Lines 18-42.`  |
 | Cursor             | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Gemini CLI         | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | OMP                | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
 | opencode           | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Pi                 | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
+| Qwen Code          | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Unknown agent type | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 
-Diagnostics append severity, a one-line message, and reporting source and code when present:
+A diagnostic keeps the reference format from the table above and appends severity, a one-line
+message, and the reporting source and code when present:
 
 ```text
-Antigravity / Cursor: @lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
-Claude / opencode:    @lua/plugin.lua#18-42 ERROR undefined global `value` [lua_ls undefined-global]
-Codex:                lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
-OMP / Pi:             @lua/plugin.lua#L18-42 ERROR undefined global `value` [lua_ls undefined-global]
-Unknown agent:        @lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
+OMP / Pi:    @lua/plugin.lua#L18-42 ERROR undefined global `value` [lua_ls undefined-global]
+Claude Code: @lua/plugin.lua#18-42 ERROR undefined global `value` [lua_ls undefined-global]
 ```
 
 ## Picker

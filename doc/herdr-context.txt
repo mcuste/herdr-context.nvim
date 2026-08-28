@@ -284,13 +284,16 @@ Antigravity    ` @lua/plugin.lua `     ` @lua/plugin.lua Lines 18-42. `
 Claude Code    ` @lua/plugin.lua `     ` @lua/plugin.lua#18-42 `
 Codex          ` lua/plugin.lua `      ` lua/plugin.lua Lines 18-42. `
 Cursor         ` @lua/plugin.lua `     ` @lua/plugin.lua Lines 18-42. `
+Gemini CLI     ` @lua/plugin.lua `     ` @lua/plugin.lua Lines 18-42. `
 OMP            ` @lua/plugin.lua `     ` @lua/plugin.lua#L18-42 `
 opencode       ` @lua/plugin.lua `     ` @lua/plugin.lua#18-42 `
 Pi             ` @lua/plugin.lua `     ` @lua/plugin.lua#L18-42 `
+Qwen Code      ` @lua/plugin.lua `     ` @lua/plugin.lua Lines 18-42. `
 Unknown        ` @lua/plugin.lua `     ` @lua/plugin.lua Lines 18-42. `
 
 Every reference starts and ends with one space. Codex paths that contain
-spaces are enclosed in double quotes.
+spaces are enclosed in double quotes. Gemini CLI and Qwen Code paths
+escape every space and shell character with a backslash.
 
 Unknown agent types use the generic format instead of failing.
 
