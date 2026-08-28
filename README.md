@@ -185,6 +185,7 @@ For `lua/plugin.lua` and lines 18 through 42:
 | Antigravity        | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Claude Code        | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Codex              | `lua/plugin.lua`  | `lua/plugin.lua Lines 18-42.`  |
+| Copilot CLI        | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Cursor             | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | Gemini CLI         | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 | OMP                | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
