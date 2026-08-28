@@ -18,9 +18,9 @@ Contents                                             *herdr-context-contents*
 1. Overview                                         *herdr-context-overview*
 
 herdr-context.nvim places the current file, every open file, a Visual
-selection, the reported diagnostics, or the quickfix list in a coding agent's
-input inside Herdr. It formats the file reference for that agent, focuses the
-agent, and leaves the text unsubmitted.
+selection, the reported diagnostics, a quickfix list, or Neovim's message
+history in a coding agent's input inside Herdr. It formats file references for
+that agent, focuses the agent, and leaves the text unsubmitted.
 
 The plugin prefers agents in the current Herdr tab. It falls back to agents in
 the current workspace and opens |vim.ui.select()| when several agents remain.
@@ -34,7 +34,7 @@ in the target pane.
 - Neovim 0.10 or later.
 - Herdr 0.7.5 or later.
 - Neovim running inside a Herdr pane.
-- A current file that exists on disk.
+- A current file that exists on disk for file-based operations.
 
 Herdr must provide $HERDR_WORKSPACE_ID and $HERDR_TAB_ID. The `herdr`
 executable must be on $PATH.
@@ -52,6 +52,7 @@ Call setup once: >lua
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      messages = '<leader>am',
       quickfix = '<leader>aq',
       quickfix_all = '<leader>aQ',
       loclist = '<leader>al',
@@ -66,6 +67,7 @@ The complete default configuration is: >lua
       buffers = '',
       diagnostics = '',
       buffers_diagnostics = '',
+      messages = '',
       quickfix = '',
       quickfix_all = '',
       loclist = '',
@@ -97,6 +99,11 @@ Each mapping applies in Normal mode and Visual mode.
     Normal-mode and Visual-mode mapping for
     |herdr-context.send_buffers_diagnostics()|. An empty string disables it.
     Give it a key of its own, because it applies in both modes.
+
+`mappings.messages` ~
+    Normal-mode and Visual-mode mapping for
+    |herdr-context.send_messages()|. An empty string disables it. Give it a
+    key of its own, because it applies in both modes.
 
 `mappings.quickfix` ~
     Normal-mode and Visual-mode mapping for |herdr-context.send_quickfix()|.
@@ -162,6 +169,11 @@ replaces the current configuration.
     Place a reference for every entry in the location list of the current
     window that names a saved file. The range is ignored.
 
+                                           *:HerdrContextSendMessages*
+:HerdrContextSendMessages ~
+    Place Neovim's |:messages| history in a fenced text block in a Herdr
+    agent's input. This operation does not require a file buffer.
+
 All commands focus the selected agent after successful text placement. They
 never submit the input.
 
@@ -199,13 +211,19 @@ send_loclist()                       *herdr-context.send_loclist()*
     Place a reference for every entry in the location list of the current
     window that names a saved file.
 
+send_messages()                     *herdr-context.send_messages()*
+    Place Neovim's |:messages| history in a fenced text block. This operation
+    does not require a file buffer.
+
 All operations are asynchronous after editor input has been validated.
 Failures are reported through |vim.notify()|.
 
 ==============================================================================
-6. Files, selections, diagnostics, and lists       *herdr-context-selections*
+6. Files, selections, diagnostics, lists, and messages
+                                                   *herdr-context-selections*
 
-Every operation requires a normal file buffer whose path exists on disk.
+Every file-based operation requires a normal file buffer whose path exists on
+disk. |herdr-context.send_messages()| does not read the current buffer.
 
 CURRENT BUFFER ~
 
@@ -303,6 +321,13 @@ texts join with `; `. A repeated text is placed once. Items keep list order.
 list holds the results of one window, so |herdr-context.send_loclist()| has no
 limit. The operation stops when the list is empty or when no item names a file
 saved on disk.
+
+NEOVIM MESSAGES ~
+
+The messages operation reads the complete history shown by |:messages|. It
+places the history after `Neovim messages:` in a fenced `text` block. A longer
+fence is used when a message contains backticks. It stops when the history is
+empty.
 
 ==============================================================================
 7. Agent routing                                       *herdr-context-routing*
@@ -404,6 +429,7 @@ The plugin stops before each dependent action:
 - An empty quickfix or location list runs no Herdr command.
 - A list without an entry saved on disk runs no Herdr command.
 - An invalid selection in the current buffer runs no Herdr command.
+- An empty Neovim message history runs no Herdr command.
 - Missing Herdr environment values run no Herdr command.
 - An agent-list failure stops routing, placement, and focus.
 - A tab-list failure stops the picker, placement, and focus.

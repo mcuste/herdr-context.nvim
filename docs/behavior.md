@@ -7,8 +7,8 @@ places, and where each operation stops on failure.
 
 ## Editor input
 
-Every operation requires a normal file buffer with a path that already exists on disk. The plugin
-normalizes the path before it calls Herdr.
+Every file-based operation requires a normal file buffer with a path that already exists on disk.
+The plugin normalizes the path before it calls Herdr. `send_messages()` does not read a buffer.
 
 ### Whole file
 
@@ -73,6 +73,13 @@ Each item becomes one ranged reference followed by the item text:
   many references it sent. `0` removes the bound, and `send_quickfix_all()` always sends the whole
   list. A location list holds the results of one window, so `send_loclist()` has no limit.
 - An empty list stops the operation.
+
+### Neovim messages
+
+`send_messages()` reads the complete history shown by `:messages`. It places the history after
+`Neovim messages:` in a fenced `text` block. If the history contains backticks, the plugin uses a
+longer fence so a message cannot close it. The operation does not require a file buffer and stops
+before any Herdr command when the history is empty.
 
 ### Visual selection
 
@@ -273,6 +280,7 @@ submits the prompt.
 | No open buffer saved on disk | Warning | No Herdr command |
 | No diagnostic in the buffer, the selection, or the open files | Warning | No Herdr command |
 | Empty quickfix or location list | Warning | No Herdr command |
+| Empty Neovim message history | Warning | No Herdr command |
 | No list entry saved on disk | Warning | No Herdr command |
 | Invalid selection in the current buffer | Warning | No Herdr command |
 | Missing workspace or tab environment | Error | No Herdr command |
@@ -290,12 +298,13 @@ All messages use `vim.notify` with the title `herdr-context.nvim`.
 ## Deliberate limits
 
 - The plugin does not save or modify the current buffer.
-- The plugin does not send a full file body. It sends a path reference.
+- File operations do not send a full file body. They send a path reference.
 - The plugin does not send unlisted, unloaded, or unsaved buffers.
 - The plugin includes source text only for partial-line and block selections.
 - The plugin does not filter diagnostics by severity and does not run a linter.
 - The plugin does not fill, sort, or open the quickfix list. It reads the current list.
 - The plugin does not read the quickfix window text or the list title.
+- The plugin does not filter, truncate, or clear Neovim's message history.
 - The plugin does not start an agent when the workspace has none.
 - The plugin does not submit the target agent's input.
 - The plugin does not select a different workspace.

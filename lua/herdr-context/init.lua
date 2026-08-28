@@ -1,6 +1,7 @@
 local adapters = require('herdr-context.adapters')
 local cli = require('herdr-context.cli')
 local context = require('herdr-context.context')
+local messages = require('herdr-context.messages')
 local router = require('herdr-context.router')
 
 local M = {}
@@ -10,6 +11,7 @@ M.config = {
     buffer = '',
     buffers = '',
     diagnostics = '',
+    messages = '',
     buffers_diagnostics = '',
     quickfix = '',
     quickfix_all = '',
@@ -73,29 +75,37 @@ local function herdr_location()
   return { workspace_id = workspace_id, tab_id = tab_id }
 end
 
+local function insert_text(text, target, kind)
+  local failure_subject = kind == 'context' and 'context' or 'Neovim messages'
+  local placed_subject = kind == 'context' and 'Context was placed' or 'Neovim messages were placed'
+
+  cli.send_text(target.pane_id, text, function(text_result)
+    if not text_result.ok then
+      notify(
+        'Could not place ' .. failure_subject .. ' in the agent input: ' .. text_result.error,
+        vim.log.levels.ERROR
+      )
+      return
+    end
+
+    cli.focus(target.pane_id, function(focus_result)
+      if not focus_result.ok then
+        notify(placed_subject .. ', but the agent could not be focused: ' .. focus_result.error, vim.log.levels.ERROR)
+      end
+    end)
+  end)
+end
+
 local function insert_contexts(contexts, target)
   local cwd = target.foreground_cwd or target.cwd
   local agent_contexts = {}
   for _, buffer_context in ipairs(contexts) do
     table.insert(agent_contexts, context.for_agent(buffer_context, cwd))
   end
-  local text = adapters.format_many(target, agent_contexts)
-
-  cli.send_text(target.pane_id, text, function(text_result)
-    if not text_result.ok then
-      notify('Could not place context in the agent input: ' .. text_result.error, vim.log.levels.ERROR)
-      return
-    end
-
-    cli.focus(target.pane_id, function(focus_result)
-      if not focus_result.ok then
-        notify('Context was placed, but the agent could not be focused: ' .. focus_result.error, vim.log.levels.ERROR)
-      end
-    end)
-  end)
+  insert_text(adapters.format_many(target, agent_contexts), target, 'context')
 end
 
-local function parse_and_insert(contexts, agent)
+local function parse_and_insert(insert, agent)
   local target, target_error = router.delivery_target(agent)
   if target == nil then
     local level = target_error.code == 'invalid_agent' and vim.log.levels.ERROR or vim.log.levels.WARN
@@ -103,10 +113,10 @@ local function parse_and_insert(contexts, agent)
     return
   end
 
-  insert_contexts(contexts, target)
+  insert(target)
 end
 
-local function select_and_insert(contexts, candidates, workspace_id)
+local function select_and_insert(insert, candidates, workspace_id)
   cli.list_tabs(workspace_id, function(result)
     if not result.ok then
       notify('Could not list Herdr tabs: ' .. result.error, vim.log.levels.ERROR)
@@ -119,12 +129,12 @@ local function select_and_insert(contexts, candidates, workspace_id)
       format_item = function(choice) return choice.label end,
     }, function(choice)
       if choice == nil then return end
-      parse_and_insert(contexts, choice.agent)
+      parse_and_insert(insert, choice.agent)
     end)
   end)
 end
 
-local function route_and_insert(contexts, agents, location)
+local function route_and_insert(insert, agents, location)
   local candidates, route_error = router.candidates(agents, location.workspace_id, location.tab_id)
   if candidates == nil then
     notify(route_error.message, vim.log.levels.WARN)
@@ -132,14 +142,14 @@ local function route_and_insert(contexts, agents, location)
   end
 
   if #candidates == 1 then
-    parse_and_insert(contexts, candidates[1])
+    parse_and_insert(insert, candidates[1])
     return
   end
 
-  select_and_insert(contexts, candidates, location.workspace_id)
+  select_and_insert(insert, candidates, location.workspace_id)
 end
 
-local function send_contexts(contexts)
+local function send_to_agent(insert)
   local location, location_error = herdr_location()
   if location == nil then
     notify(location_error, vim.log.levels.ERROR)
@@ -152,8 +162,12 @@ local function send_contexts(contexts)
       return
     end
 
-    route_and_insert(contexts, result.value.agents, location)
+    route_and_insert(insert, result.value.agents, location)
   end)
+end
+
+local function send_contexts(contexts)
+  send_to_agent(function(target) insert_contexts(contexts, target) end)
 end
 
 local function visual_mode()
@@ -242,6 +256,7 @@ local commands = {
   { name = 'HerdrContextSendQuickfix', action = 'send_quickfix', desc = 'the quickfix list' },
   { name = 'HerdrContextSendQuickfixAll', action = 'send_quickfix_all', desc = 'the whole quickfix list' },
   { name = 'HerdrContextSendLoclist', action = 'send_loclist', desc = 'the location list' },
+  { name = 'HerdrContextSendMessages', action = 'send_messages', desc = 'the Neovim message history' },
 }
 
 local mappings = {
@@ -252,6 +267,7 @@ local mappings = {
   { name = 'quickfix', action = 'send_quickfix', desc = 'quickfix list' },
   { name = 'quickfix_all', action = 'send_quickfix_all', desc = 'whole quickfix list' },
   { name = 'loclist', action = 'send_loclist', desc = 'location list' },
+  { name = 'messages', action = 'send_messages', desc = 'Neovim message history' },
 }
 
 function M.setup(config)
@@ -345,5 +361,15 @@ function M.send_quickfix_all() send_list('quickfix', 0) end
 
 -- A location list holds the results of one window, so it stays under the quickfix limit.
 function M.send_loclist() send_list('loclist', 0) end
+
+function M.send_messages()
+  local text, message_error = messages.collect()
+  if text == nil then
+    notify(message_error, vim.log.levels.WARN)
+    return
+  end
+
+  send_to_agent(function(target) insert_text(text, target, 'messages') end)
+end
 
 return M

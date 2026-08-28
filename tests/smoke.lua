@@ -119,6 +119,26 @@ assert_equal(read_calls(3), {
 })
 assert_equal(read_text(), ' @README.md ')
 
+vim.cmd('enew')
+vim.bo.buftype = 'nofile'
+vim.cmd('messages clear')
+vim.api.nvim_echo({ { 'build failed' }, { '\nstack trace' } }, true, {})
+vim.cmd('HerdrContextSendMessages')
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' Neovim messages:\n\n```text\nbuild failed\nstack trace\n``` ')
+vim.cmd('messages clear')
+vim.cmd('bwipeout!')
+with_notifications(function(notifications)
+  vim.cmd('HerdrContextSendMessages')
+  assert_equal(notifications[1].message, "Neovim's message history is empty.")
+  assert_equal(notifications[1].level, vim.log.levels.WARN)
+  assert_equal(vim.fn.filereadable(log), 0)
+end)
+
 vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/CHANGELOG.md'))
 vim.cmd('HerdrContextSendBuffers')
 assert_equal(read_calls(3), {
@@ -299,6 +319,20 @@ with_notifications(function(notifications)
   assert_equal(notifications[1].message, 'Could not list Herdr tabs: could not list tabs')
 end)
 
+vim.cmd('messages clear')
+vim.api.nvim_echo({ { 'message placement fails' } }, true, {})
+with_notifications(function(notifications)
+  vim.env.HERDR_CONTEXT_TEST_SCENARIO = 'send-failure'
+  vim.cmd('HerdrContextSendMessages')
+  wait_for_notification(notifications)
+  assert_equal(read_calls(2), {
+    'agent|list||',
+    'pane|send-text|smoke:p1|<text>',
+  })
+  assert_equal(notifications[1].message, 'Could not place Neovim messages in the agent input: could not place input')
+  assert_equal(notifications[1].level, vim.log.levels.ERROR)
+end)
+vim.cmd('messages clear')
 with_notifications(function(notifications)
   vim.env.HERDR_CONTEXT_TEST_SCENARIO = 'send-failure'
   vim.cmd('HerdrContextSendBuffer')

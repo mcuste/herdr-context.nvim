@@ -9,17 +9,18 @@
 
 ![herdr-context.nvim demo](docs/demo/herdr-context-demo.gif)
 
-Send the current file, all open files, a visual selection, the current diagnostics, or the quickfix
-list from Neovim to a coding agent in [Herdr](https://herdr.dev/), a terminal workspace for coding
-agents. One command finds the right agent, places the file references in its prompt using the syntax
-it expects, and focuses its pane. You can add to or change the prompt before submitting it.
+Send the current file, all open files, a visual selection, the current diagnostics, a quickfix list,
+or Neovim's message history to a coding agent in [Herdr](https://herdr.dev/), a terminal workspace
+for coding agents. One command finds the right agent, places the context in its prompt, and focuses
+its pane. File references use the syntax that the selected agent expects. You can add to or change
+the prompt before submitting it.
 
-The plugin supports every agent that Herdr detects, and places each reference with the syntax that
-agent expects. It has no Neovim plugin dependencies and works with any `vim.ui.select` provider.
+The plugin supports every agent that Herdr detects. It has no Neovim plugin dependencies and works
+with any `vim.ui.select` provider.
 
 ## How it works
 
-![How herdr-context.nvim places a file reference](docs/diagrams/context-delivery.svg)
+![How herdr-context.nvim places context](docs/diagrams/context-delivery.svg)
 
 How automated agent picking works:
 
@@ -93,14 +94,28 @@ The quickfix list or the location list. Each entry keeps its own text:
  @README.md#L3-3 send the value
 ```
 
-Three rules cover the rest:
+Neovim's `:messages` history:
+
+````text
+ Neovim messages:
+
+```text
+build failed
+stack trace
+```
+````
+
+These rules cover file references:
 
 - Save first. A reference points at the file on disk. The plugin refuses or skips a modified buffer.
   A partial-line or block selection is the exception, because it sends the text itself. Diagnostics
   always need a saved file.
 - Paths are shortened. An agent working in `/work/project` gets `@lua/plugin.lua`, not
   `@/work/project/lua/plugin.lua`. A file outside the agent's directory keeps its full path.
-- Nothing else is added, and the prompt is never submitted.
+- No extra file context is added.
+
+Message history is read from `:messages` and placed in a fenced text block. Every operation leaves
+the prompt unsubmitted.
 
 [Behavior and routing](docs/behavior.md) has the exact rules for every operation.
 
@@ -109,7 +124,7 @@ Three rules cover the rest:
 - Neovim 0.10 or later
 - Herdr 0.7.5 or later
 - Neovim running inside a Herdr pane
-- A current buffer backed by a file on disk
+- A current buffer backed by a file on disk for file-based operations
 
 Run `:checkhealth herdr-context` after installation to check the first three requirements.
 
@@ -126,6 +141,7 @@ Run `:checkhealth herdr-context` after installation to check the first three req
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      messages = '<leader>am',
       quickfix = '<leader>aq',
       quickfix_all = '<leader>aQ',
       loclist = '<leader>al',
@@ -149,6 +165,7 @@ later(function()
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      messages = '<leader>am',
       quickfix = '<leader>aq',
       quickfix_all = '<leader>aQ',
       loclist = '<leader>al',
@@ -168,6 +185,7 @@ later(function()
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      messages = '<leader>am',
       quickfix = '<leader>aq',
       quickfix_all = '<leader>aQ',
       loclist = '<leader>al',
@@ -190,6 +208,7 @@ created unless you configure them.
 | `:HerdrContextSendQuickfix`           | Normal, Visual | Place a reference to each quickfix entry, up to `quickfix.limit`       |
 | `:HerdrContextSendQuickfixAll`        | Normal, Visual | Place a reference to each quickfix entry, with no limit                |
 | `:HerdrContextSendLoclist`            | Normal, Visual | Place a reference to each entry in the window location list            |
+| `:HerdrContextSendMessages`           | Normal, Visual | Place Neovim's `:messages` history in a fenced text block               |
 | `:checkhealth herdr-context`          | Any            | Check Neovim, Herdr, and the current Herdr environment                 |
 
 The buffer command accepts the Ex range that Neovim creates after a Visual-mode selection. The list

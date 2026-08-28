@@ -7,6 +7,7 @@
 | `lua/herdr-context/init.lua` | Public API, configuration, commands, mappings, and operation control |
 | `lua/herdr-context/context.lua` | File validation, Visual selection capture, and relative paths |
 | `lua/herdr-context/diagnostics.lua` | Diagnostic collection, line ranges, and one-line text |
+| `lua/herdr-context/messages.lua` | Neovim message history collection and fenced text formatting |
 | `lua/herdr-context/router.lua` | Workspace and tab routing, target validation, and picker labels |
 | `lua/herdr-context/adapters.lua` | OMP, Pi, Claude Code, Codex, and generic reference formats |
 | `lua/herdr-context/cli.lua` | Herdr process calls and JSON response parsing |
@@ -25,11 +26,11 @@
 The public functions validate editor input before starting asynchronous Herdr work. The remaining
 operation follows the sequence in [Behavior and routing](behavior.md):
 
-1. `context.lua` creates a file, selection, or diagnostic record.
+1. `context.lua` creates file-based records, or `messages.lua` collects Neovim's message history.
 2. `cli.lua` lists agents through `vim.system`.
 3. `router.lua` limits the candidates to the current workspace and preferred tab.
 4. `vim.ui.select` chooses a target when several candidates remain.
-5. `adapters.lua` formats the path and optional range for the selected agent.
+5. `adapters.lua` formats file-based context for the selected agent.
 6. `cli.lua` places the text in the pane.
 7. `cli.lua` focuses the pane after successful placement.
 

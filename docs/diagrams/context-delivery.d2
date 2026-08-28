@@ -7,12 +7,12 @@ flow: Context delivery {
   agent: Coding agent
 
   user -> nvim: run mapping or command
-  nvim -> plugin: current file or visual selection
+  nvim -> plugin: file, selection, diagnostics, list, or messages
   plugin -> herdr: list agents in workspace
   herdr -> plugin: matching agents
   plugin -> user: choose when several match
   user -> plugin: selected agent
-  plugin -> plugin: format the agent file reference
+  plugin -> plugin: format context for the agent input
   plugin -> herdr: place text in target pane
   herdr -> agent: insert text without submitting
   herdr -> plugin: placement succeeded

@@ -16,6 +16,9 @@ All notable changes to this project are documented in this file. The format foll
   Normal and Visual mode.
 - `quickfix.limit` bounds `send_quickfix()`. The default is 50, and 0 removes the limit. A location
   list holds the results of one window, so `send_loclist()` has no limit.
+- `:HerdrContextSendMessages` and `send_messages()` place Neovim's complete `:messages` history in a
+  fenced text block without requiring a file buffer.
+- `mappings.messages` binds message history delivery in Normal and Visual mode.
 
 ## [1.3.0] - 2026-08-28
 

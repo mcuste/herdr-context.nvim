@@ -153,7 +153,13 @@ local function sample_quickfix()
     { filename = repository_file('README.md'), lnum = 3, col = 9, text = 'second\n  match' },
     { filename = repository_file('README.md'), lnum = 3, col = 20, text = 'first match' },
     { text = 'a header line without a position' },
-    { filename = repository_file('CHANGELOG.md'), lnum = 7, end_lnum = 9, end_col = 0, text = 'block' },
+    {
+      filename = repository_file('CHANGELOG.md'),
+      lnum = 7,
+      end_lnum = 9,
+      end_col = 0,
+      text = 'block',
+    },
     { filename = repository_file('CHANGELOG.md'), lnum = 0, text = 'whole file' },
   }
 end
@@ -266,6 +272,26 @@ test('appends partial selection content after native ranges', function()
   assert_equal(adapters.get('omp').format(context), expected)
   context.selection = 'local ``` value'
   assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-18 \n\n````lua\nlocal ``` value\n````')
+end)
+
+test('formats Neovim message history as fenced agent context', function()
+  local messages = require('herdr-context.messages')
+  assert_equal(
+    messages.format('build failed\nstack trace'),
+    ' Neovim messages:\n\n```text\nbuild failed\nstack trace\n``` '
+  )
+  assert_equal(
+    messages.format('message with ``` ticks'),
+    ' Neovim messages:\n\n````text\nmessage with ``` ticks\n```` '
+  )
+  assert_equal(
+    messages.format('message with ```` ticks'),
+    ' Neovim messages:\n\n`````text\nmessage with ```` ticks\n````` '
+  )
+
+  local formatted, format_error = messages.format(' \n')
+  assert_equal(formatted, nil)
+  assert_equal(format_error, "Neovim's message history is empty.")
 end)
 
 test('appends diagnostic text after the reference', function()
@@ -1493,6 +1519,8 @@ test('setup creates the command without a default mapping', function()
   assert_equal(plugin.config.mappings.quickfix_all, '')
   assert_equal(plugin.config.mappings.loclist, '')
   assert_equal(plugin.config.quickfix.limit, 50)
+  assert_equal(vim.fn.exists(':HerdrContextSendMessages'), 2)
+  assert_equal(plugin.config.mappings.messages, '')
 
   plugin.setup({ mappings = { buffer = '<leader>ac' } })
   assert_equal(plugin.config.mappings.buffer, '<leader>ac')
@@ -1505,12 +1533,14 @@ test('setup registers configured normal and visual mappings', function()
   local buffer_mapping = '<Plug>(herdr-context-test-buffer)'
   local diagnostics_mapping = '<Plug>(herdr-context-test-diagnostics)'
   local buffers_diagnostics_mapping = '<Plug>(herdr-context-test-buffers-diagnostics)'
+  local messages_mapping = '<Plug>(herdr-context-test-messages)'
 
   plugin.setup({
     mappings = {
       buffer = buffer_mapping,
       diagnostics = diagnostics_mapping,
       buffers_diagnostics = buffers_diagnostics_mapping,
+      messages = messages_mapping,
     },
   })
 
@@ -1520,12 +1550,16 @@ test('setup registers configured normal and visual mappings', function()
   assert_equal(vim.fn.maparg(diagnostics_mapping, 'x', false, true).lhs, diagnostics_mapping)
   assert_equal(vim.fn.maparg(buffers_diagnostics_mapping, 'n', false, true).lhs, buffers_diagnostics_mapping)
   assert_equal(vim.fn.maparg(buffers_diagnostics_mapping, 'x', false, true).lhs, buffers_diagnostics_mapping)
+  assert_equal(vim.fn.maparg(messages_mapping, 'n', false, true).lhs, messages_mapping)
+  assert_equal(vim.fn.maparg(messages_mapping, 'x', false, true).lhs, messages_mapping)
   vim.keymap.del('n', buffer_mapping)
   vim.keymap.del('x', buffer_mapping)
   vim.keymap.del('n', diagnostics_mapping)
   vim.keymap.del('x', diagnostics_mapping)
   vim.keymap.del('n', buffers_diagnostics_mapping)
   vim.keymap.del('x', buffers_diagnostics_mapping)
+  vim.keymap.del('n', messages_mapping)
+  vim.keymap.del('x', messages_mapping)
 end)
 
 test('rejects an invalid mapping before replacing configuration', function()
