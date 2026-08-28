@@ -22,28 +22,21 @@ end
 
 local function append_details(prompt, context) return append_selection(append_diagnostic(prompt, context), context) end
 
-local function format_generic_buffer(context)
-  local reference = '@' .. context.relative_file
-  local prompt = context.range and string.format(' %s Lines %d-%d. ', reference, context.start_line, context.end_line)
-    or string.format(' %s ', reference)
-  return append_details(prompt, context)
-end
-
-local function format_omp_buffer(context)
+local function format_pi_style(context)
   local prompt = context.range
       and string.format(' @%s#L%d-%d ', context.relative_file, context.start_line, context.end_line)
     or string.format(' @%s ', context.relative_file)
   return append_details(prompt, context)
 end
 
-local function format_claude_buffer(context)
+local function format_claude_style(context)
   local prompt = context.range
       and string.format(' @%s#%d-%d ', context.relative_file, context.start_line, context.end_line)
     or string.format(' @%s ', context.relative_file)
   return append_details(prompt, context)
 end
 
-local function format_codex_buffer(context)
+local function format_codex_style(context)
   local path = context.relative_file
   if path:find('%s') ~= nil and path:find('"', 1, true) == nil then path = string.format('"%s"', path) end
   local prompt = context.range and string.format(' %s Lines %d-%d. ', path, context.start_line, context.end_line)
@@ -51,18 +44,27 @@ local function format_codex_buffer(context)
   return append_details(prompt, context)
 end
 
-local OmpAdapter = { format = format_omp_buffer }
-local PiAdapter = { format = format_omp_buffer }
-local ClaudeAdapter = { format = format_claude_buffer }
-local OpencodeAdapter = { format = format_claude_buffer }
-local CodexAdapter = { format = format_codex_buffer }
-local GenericAdapter = { format = format_generic_buffer }
+local function format_generic_style(context)
+  local reference = '@' .. context.relative_file
+  local prompt = context.range and string.format(' %s Lines %d-%d. ', reference, context.start_line, context.end_line)
+    or string.format(' %s ', reference)
+  return append_details(prompt, context)
+end
+
+local OmpAdapter = { format = format_pi_style }
+local PiAdapter = { format = format_pi_style }
+local ClaudeAdapter = { format = format_claude_style }
+local OpencodeAdapter = { format = format_claude_style }
+local AntigravityAdapter = { format = format_generic_style }
+local CodexAdapter = { format = format_codex_style }
+local GenericAdapter = { format = format_generic_style }
 
 M.registry = {
   omp = OmpAdapter,
   pi = PiAdapter,
   claude = ClaudeAdapter,
   opencode = OpencodeAdapter,
+  agy = AntigravityAdapter,
   codex = CodexAdapter,
   generic = GenericAdapter,
 }

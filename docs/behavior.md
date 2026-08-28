@@ -167,11 +167,13 @@ For `lua/plugin.lua`:
 | Pi | ` @lua/plugin.lua ` | ` @lua/plugin.lua#L18-42 ` |
 | Claude Code | ` @lua/plugin.lua ` | ` @lua/plugin.lua#18-42 ` |
 | opencode | ` @lua/plugin.lua ` | ` @lua/plugin.lua#18-42 ` |
+| Antigravity | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 | Codex | ` lua/plugin.lua ` | ` lua/plugin.lua Lines 18-42. ` |
 | Generic | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 
 Every reference starts and ends with one space. This prevents a new reference from joining text
 already present in the agent input. Codex paths that contain spaces are enclosed in double quotes.
+Antigravity has no line range syntax, so it uses the generic format.
 
 Each diagnostic adds its own line:
 

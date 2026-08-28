@@ -10,6 +10,8 @@ All notable changes to this project are documented in this file. The format foll
 
 - opencode reference format. A selected range uses the `@file#18-42` syntax that the opencode
   prompt reads.
+- Antigravity CLI (`agy`) reference format. It has no line range syntax, so it uses the generic
+  format.
 
 ## [1.2.0] - 2026-08-27
 
