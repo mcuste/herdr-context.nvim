@@ -144,10 +144,12 @@ test('registers concrete adapters with a generic fallback', function()
   assert_equal(adapters.get('omp').format(context), expected)
   assert_equal(adapters.get('pi').format(context), expected)
   assert_equal(adapters.get('claude').format(context), expected)
+  assert_equal(adapters.get('opencode').format(context), expected)
   assert_equal(adapters.get('codex').format(context), ' plugin.lua ')
   assert_equal(adapters.get('codex').format({ relative_file = 'lua/my plugin.lua' }), ' "lua/my plugin.lua" ')
   assert_equal(adapters.get('unknown'), adapters.registry.generic)
   assert_equal(adapters.get('omp') == adapters.get('pi'), false)
+  assert_equal(adapters.get('claude') == adapters.get('opencode'), false)
   assert_equal(adapters.get('codex') == adapters.get('omp'), false)
 end)
 
@@ -163,6 +165,7 @@ test('formats native and fallback line ranges', function()
   assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-42 ')
   assert_equal(adapters.get('pi').format(context), ' @lua/plugin.lua#L18-42 ')
   assert_equal(adapters.get('claude').format(context), ' @lua/plugin.lua#18-42 ')
+  assert_equal(adapters.get('opencode').format(context), ' @lua/plugin.lua#18-42 ')
   assert_equal(adapters.get('codex').format(context), ' lua/plugin.lua Lines 18-42. ')
   assert_equal(adapters.get('unknown').format(context), ' @lua/plugin.lua Lines 18-42. ')
 end)
@@ -201,6 +204,10 @@ test('appends diagnostic text after the reference', function()
   )
   assert_equal(
     adapters.get('claude').format(context),
+    ' @lua/plugin.lua#18-20 ERROR undefined global `value` [lua_ls undefined-global] '
+  )
+  assert_equal(
+    adapters.get('opencode').format(context),
     ' @lua/plugin.lua#18-20 ERROR undefined global `value` [lua_ls undefined-global] '
   )
   assert_equal(

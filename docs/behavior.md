@@ -166,6 +166,7 @@ For `lua/plugin.lua`:
 | OMP | ` @lua/plugin.lua ` | ` @lua/plugin.lua#L18-42 ` |
 | Pi | ` @lua/plugin.lua ` | ` @lua/plugin.lua#L18-42 ` |
 | Claude Code | ` @lua/plugin.lua ` | ` @lua/plugin.lua#18-42 ` |
+| opencode | ` @lua/plugin.lua ` | ` @lua/plugin.lua#18-42 ` |
 | Codex | ` lua/plugin.lua ` | ` lua/plugin.lua Lines 18-42. ` |
 | Generic | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 

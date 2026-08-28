@@ -54,6 +54,7 @@ end
 local OmpAdapter = { format = format_omp_buffer }
 local PiAdapter = { format = format_omp_buffer }
 local ClaudeAdapter = { format = format_claude_buffer }
+local OpencodeAdapter = { format = format_claude_buffer }
 local CodexAdapter = { format = format_codex_buffer }
 local GenericAdapter = { format = format_generic_buffer }
 
@@ -61,6 +62,7 @@ M.registry = {
   omp = OmpAdapter,
   pi = PiAdapter,
   claude = ClaudeAdapter,
+  opencode = OpencodeAdapter,
   codex = CodexAdapter,
   generic = GenericAdapter,
 }
