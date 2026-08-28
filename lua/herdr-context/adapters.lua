@@ -22,13 +22,6 @@ end
 
 local function append_details(prompt, context) return append_selection(append_diagnostic(prompt, context), context) end
 
-local function format_pi_style(context)
-  local prompt = context.range
-      and string.format(' @%s#L%d-%d ', context.relative_file, context.start_line, context.end_line)
-    or string.format(' @%s ', context.relative_file)
-  return append_details(prompt, context)
-end
-
 local function format_claude_style(context)
   local prompt = context.range
       and string.format(' @%s#%d-%d ', context.relative_file, context.start_line, context.end_line)
@@ -44,6 +37,13 @@ local function format_codex_style(context)
   return append_details(prompt, context)
 end
 
+local function format_pi_style(context)
+  local prompt = context.range
+      and string.format(' @%s#L%d-%d ', context.relative_file, context.start_line, context.end_line)
+    or string.format(' @%s ', context.relative_file)
+  return append_details(prompt, context)
+end
+
 local function format_generic_style(context)
   local reference = '@' .. context.relative_file
   local prompt = context.range and string.format(' %s Lines %d-%d. ', reference, context.start_line, context.end_line)
@@ -51,21 +51,23 @@ local function format_generic_style(context)
   return append_details(prompt, context)
 end
 
-local OmpAdapter = { format = format_pi_style }
-local PiAdapter = { format = format_pi_style }
-local ClaudeAdapter = { format = format_claude_style }
-local OpencodeAdapter = { format = format_claude_style }
 local AntigravityAdapter = { format = format_generic_style }
+local ClaudeAdapter = { format = format_claude_style }
 local CodexAdapter = { format = format_codex_style }
+local CursorAdapter = { format = format_generic_style }
+local OmpAdapter = { format = format_pi_style }
+local OpencodeAdapter = { format = format_claude_style }
+local PiAdapter = { format = format_pi_style }
 local GenericAdapter = { format = format_generic_style }
 
 M.registry = {
-  omp = OmpAdapter,
-  pi = PiAdapter,
-  claude = ClaudeAdapter,
-  opencode = OpencodeAdapter,
   agy = AntigravityAdapter,
+  claude = ClaudeAdapter,
   codex = CodexAdapter,
+  cursor = CursorAdapter,
+  omp = OmpAdapter,
+  opencode = OpencodeAdapter,
+  pi = PiAdapter,
   generic = GenericAdapter,
 }
 

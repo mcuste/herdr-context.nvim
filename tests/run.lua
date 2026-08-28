@@ -141,11 +141,12 @@ test('registers concrete adapters with a generic fallback', function()
   local expected = ' @plugin.lua '
   local context = { relative_file = 'plugin.lua' }
 
-  assert_equal(adapters.get('omp').format(context), expected)
-  assert_equal(adapters.get('pi').format(context), expected)
-  assert_equal(adapters.get('claude').format(context), expected)
-  assert_equal(adapters.get('opencode').format(context), expected)
   assert_equal(adapters.get('agy').format(context), expected)
+  assert_equal(adapters.get('claude').format(context), expected)
+  assert_equal(adapters.get('cursor').format(context), expected)
+  assert_equal(adapters.get('omp').format(context), expected)
+  assert_equal(adapters.get('opencode').format(context), expected)
+  assert_equal(adapters.get('pi').format(context), expected)
   assert_equal(adapters.get('codex').format(context), ' plugin.lua ')
   assert_equal(adapters.get('codex').format({ relative_file = 'lua/my plugin.lua' }), ' "lua/my plugin.lua" ')
   assert_equal(adapters.get('unknown'), adapters.registry.generic)
@@ -163,12 +164,13 @@ test('formats native and fallback line ranges', function()
     range = true,
   }
 
-  assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-42 ')
-  assert_equal(adapters.get('pi').format(context), ' @lua/plugin.lua#L18-42 ')
-  assert_equal(adapters.get('claude').format(context), ' @lua/plugin.lua#18-42 ')
-  assert_equal(adapters.get('opencode').format(context), ' @lua/plugin.lua#18-42 ')
   assert_equal(adapters.get('agy').format(context), ' @lua/plugin.lua Lines 18-42. ')
+  assert_equal(adapters.get('claude').format(context), ' @lua/plugin.lua#18-42 ')
   assert_equal(adapters.get('codex').format(context), ' lua/plugin.lua Lines 18-42. ')
+  assert_equal(adapters.get('cursor').format(context), ' @lua/plugin.lua Lines 18-42. ')
+  assert_equal(adapters.get('omp').format(context), ' @lua/plugin.lua#L18-42 ')
+  assert_equal(adapters.get('opencode').format(context), ' @lua/plugin.lua#18-42 ')
+  assert_equal(adapters.get('pi').format(context), ' @lua/plugin.lua#L18-42 ')
   assert_equal(adapters.get('unknown').format(context), ' @lua/plugin.lua Lines 18-42. ')
 end)
 

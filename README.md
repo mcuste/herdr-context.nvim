@@ -14,8 +14,8 @@ a coding agent in [Herdr](https://herdr.dev/), a terminal workspace for coding a
 finds the right agent, places the file references in its prompt using the syntax it expects, and
 focuses its pane. You can add to or change the prompt before submitting it.
 
-The plugin supports OMP, Pi, Claude Code, opencode, Antigravity, and Codex import syntax. It has no
-Neovim plugin dependencies and works with any `vim.ui.select` provider.
+The plugin knows the reference syntax of the common coding agents and uses a generic format for the
+rest. It has no Neovim plugin dependencies and works with any `vim.ui.select` provider.
 
 ## How it works
 
@@ -182,22 +182,23 @@ For `lua/plugin.lua` and lines 18 through 42:
 
 | Agent              | Whole file        | Selected lines                 |
 | ------------------ | ----------------- | ------------------------------ |
-| OMP                | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
-| Pi                 | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
-| Claude Code        | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
-| opencode           | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Antigravity        | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| Claude Code        | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
 | Codex              | `lua/plugin.lua`  | `lua/plugin.lua Lines 18-42.`  |
+| Cursor             | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
+| OMP                | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
+| opencode           | `@lua/plugin.lua` | `@lua/plugin.lua#18-42`        |
+| Pi                 | `@lua/plugin.lua` | `@lua/plugin.lua#L18-42`       |
 | Unknown agent type | `@lua/plugin.lua` | `@lua/plugin.lua Lines 18-42.` |
 
 Diagnostics append severity, a one-line message, and reporting source and code when present:
 
 ```text
-OMP / Pi:          @lua/plugin.lua#L18-42 ERROR undefined global `value` [lua_ls undefined-global]
-Claude / opencode: @lua/plugin.lua#18-42 ERROR undefined global `value` [lua_ls undefined-global]
-Antigravity:       @lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
-Codex:             lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
-Unknown agent:     @lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
+Antigravity / Cursor: @lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
+Claude / opencode:    @lua/plugin.lua#18-42 ERROR undefined global `value` [lua_ls undefined-global]
+Codex:                lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
+OMP / Pi:             @lua/plugin.lua#L18-42 ERROR undefined global `value` [lua_ls undefined-global]
+Unknown agent:        @lua/plugin.lua Lines 18-42. ERROR undefined global `value` [lua_ls undefined-global]
 ```
 
 ## Picker

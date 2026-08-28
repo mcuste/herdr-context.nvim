@@ -12,6 +12,7 @@ All notable changes to this project are documented in this file. The format foll
   prompt reads.
 - Antigravity CLI (`agy`) reference format. It has no line range syntax, so it uses the generic
   format.
+- Cursor CLI reference format. It has no line range syntax, so it uses the generic format.
 
 ## [1.2.0] - 2026-08-27
 
