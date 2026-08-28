@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file. The format foll
   format.
 - Cursor CLI reference format. It has no line range syntax, so it uses the generic format.
 - Copilot CLI reference format. It has no line range syntax, so it uses the generic format.
+- Kimi CLI reference format. It has no line range syntax, so it uses the generic format.
 - Gemini CLI and Qwen Code reference format. Neither has a line range syntax, and their paths
   escape every space and shell character with a backslash.
 

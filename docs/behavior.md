@@ -169,6 +169,7 @@ For `lua/plugin.lua`:
 | Copilot CLI | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 | Cursor | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 | Gemini CLI | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
+| Kimi CLI | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 | OMP | ` @lua/plugin.lua ` | ` @lua/plugin.lua#L18-42 ` |
 | opencode | ` @lua/plugin.lua ` | ` @lua/plugin.lua#18-42 ` |
 | Pi | ` @lua/plugin.lua ` | ` @lua/plugin.lua#L18-42 ` |
@@ -177,9 +178,9 @@ For `lua/plugin.lua`:
 
 Every reference starts and ends with one space. This prevents a new reference from joining text
 already present in the agent input. Codex paths that contain spaces are enclosed in double quotes.
-Antigravity, Copilot CLI, Cursor, Gemini CLI, and Qwen Code have no line range syntax, so they use
-the generic text for a range. Gemini CLI and Qwen Code read a path up to the first space or shell character, so
-the plugin escapes those characters with a backslash.
+Only OMP, Pi, Claude Code, and opencode have a line range syntax. Every other agent uses the
+generic text for a range. Gemini CLI and Qwen Code read a path up to the first space or shell
+character, so the plugin escapes those characters with a backslash.
 
 Each diagnostic adds its own line:
 
