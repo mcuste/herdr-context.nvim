@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-28
+
 ### Added
 
 - `:HerdrContextSendQuickfix` and `send_quickfix()` send one reference for each quickfix entry that
