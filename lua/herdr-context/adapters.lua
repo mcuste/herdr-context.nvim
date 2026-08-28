@@ -60,10 +60,12 @@ end
 
 local AntigravityAdapter = { format = format_generic_style }
 local ClaudeAdapter = { format = format_claude_style }
+local ClineAdapter = { format = format_generic_style }
 local CodexAdapter = { format = format_codex_style }
 local CopilotAdapter = { format = format_generic_style }
 local CursorAdapter = { format = format_generic_style }
 local GeminiAdapter = { format = format_gemini_style }
+local KiloAdapter = { format = format_claude_style }
 local KimiAdapter = { format = format_generic_style }
 local OmpAdapter = { format = format_pi_style }
 local OpencodeAdapter = { format = format_claude_style }
@@ -74,10 +76,12 @@ local GenericAdapter = { format = format_generic_style }
 M.registry = {
   agy = AntigravityAdapter,
   claude = ClaudeAdapter,
+  cline = ClineAdapter,
   codex = CodexAdapter,
   copilot = CopilotAdapter,
   cursor = CursorAdapter,
   gemini = GeminiAdapter,
+  kilo = KiloAdapter,
   kimi = KimiAdapter,
   omp = OmpAdapter,
   opencode = OpencodeAdapter,
