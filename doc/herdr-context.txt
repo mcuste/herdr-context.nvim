@@ -8,7 +8,7 @@ Contents                                             *herdr-context-contents*
 3. Setup                                            |herdr-context-setup|
 4. Commands                                      |herdr-context-commands|
 5. Lua API                                            |herdr-context-api|
-6. Files, selections, and diagnostics           |herdr-context-selections|
+6. Files, selections, diagnostics, and lists    |herdr-context-selections|
 7. Agent routing                                    |herdr-context-routing|
 8. File reference formats                        |herdr-context-formats|
 9. Failure behavior                              |herdr-context-failures|
@@ -18,9 +18,9 @@ Contents                                             *herdr-context-contents*
 1. Overview                                         *herdr-context-overview*
 
 herdr-context.nvim places the current file, every open file, a Visual
-selection, or the reported diagnostics in a coding agent's input inside Herdr.
-It formats the file reference for that agent, focuses the agent, and leaves
-the text unsubmitted.
+selection, the reported diagnostics, or the quickfix list in a coding agent's
+input inside Herdr. It formats the file reference for that agent, focuses the
+agent, and leaves the text unsubmitted.
 
 The plugin prefers agents in the current Herdr tab. It falls back to agents in
 the current workspace and opens |vim.ui.select()| when several agents remain.
@@ -52,6 +52,9 @@ Call setup once: >lua
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      quickfix = '<leader>aq',
+      quickfix_all = '<leader>aQ',
+      loclist = '<leader>al',
     },
   })
 <
@@ -63,6 +66,12 @@ The complete default configuration is: >lua
       buffers = '',
       diagnostics = '',
       buffers_diagnostics = '',
+      quickfix = '',
+      quickfix_all = '',
+      loclist = '',
+    },
+    quickfix = {
+      limit = 50,
     },
   }
 <
@@ -88,6 +97,27 @@ Each mapping applies in Normal mode and Visual mode.
     Normal-mode and Visual-mode mapping for
     |herdr-context.send_buffers_diagnostics()|. An empty string disables it.
     Give it a key of its own, because it applies in both modes.
+
+`mappings.quickfix` ~
+    Normal-mode and Visual-mode mapping for |herdr-context.send_quickfix()|.
+    An empty string disables it. Give it a key of its own, because it applies
+    in both modes.
+
+`mappings.quickfix_all` ~
+    Normal-mode and Visual-mode mapping for
+    |herdr-context.send_quickfix_all()|. An empty string disables it. Give it
+    a key of its own, because it applies in both modes.
+
+`mappings.loclist` ~
+    Normal-mode and Visual-mode mapping for |herdr-context.send_loclist()|. An
+    empty string disables it. Give it a key of its own, because it applies in
+    both modes.
+
+`quickfix.limit` ~
+    Largest number of references that |herdr-context.send_quickfix()| sends. A
+    longer list is cut, and Neovim reports how many references it sent. Use 0
+    to remove the limit. The value must be a whole number of 0 or more.
+    |herdr-context.send_quickfix_all()| ignores it.
 
 Mapping values must be strings. Invalid values make setup fail before it
 replaces the current configuration.
@@ -118,6 +148,20 @@ replaces the current configuration.
     diagnostics in that file. In Visual mode, or with a range, the current
     file uses the selection and only its diagnostics in the selected lines.
 
+                                             *:HerdrContextSendQuickfix*
+:[range]HerdrContextSendQuickfix ~
+    Place a reference for every quickfix list entry that names a saved file,
+    up to `quickfix.limit`. The range is ignored.
+
+                                          *:HerdrContextSendQuickfixAll*
+:[range]HerdrContextSendQuickfixAll ~
+    The same, without the limit. The range is ignored.
+
+                                              *:HerdrContextSendLoclist*
+:[range]HerdrContextSendLoclist ~
+    Place a reference for every entry in the location list of the current
+    window that names a saved file. The range is ignored.
+
 All commands focus the selected agent after successful text placement. They
 never submit the input.
 
@@ -144,11 +188,22 @@ send_buffers_diagnostics() *herdr-context.send_buffers_diagnostics()*
     Place a reference to every open saved file, each one followed by the
     diagnostics in that file.
 
+send_quickfix()                     *herdr-context.send_quickfix()*
+    Place a reference for every quickfix list entry that names a saved file,
+    up to `quickfix.limit`.
+
+send_quickfix_all()             *herdr-context.send_quickfix_all()*
+    The same, without the limit.
+
+send_loclist()                       *herdr-context.send_loclist()*
+    Place a reference for every entry in the location list of the current
+    window that names a saved file.
+
 All operations are asynchronous after editor input has been validated.
 Failures are reported through |vim.notify()|.
 
 ==============================================================================
-6. Files, selections, and diagnostics              *herdr-context-selections*
+6. Files, selections, diagnostics, and lists       *herdr-context-selections*
 
 Every operation requires a normal file buffer whose path exists on disk.
 
@@ -222,6 +277,32 @@ complete.
 The current buffer can carry a selection, and then only the diagnostics in the
 selected lines are placed for that file. The operation stops when no open file
 has a diagnostic.
+
+QUICKFIX AND LOCATION LISTS ~
+
+The quickfix operation reads |getqflist()|. The location list operation reads
+|getloclist()| for the current window. Both read the items Neovim stores,
+never the quickfix window text, so 'errorformat' and 'quickfixtextfunc' cannot
+change what the agent receives.
+
+Every item becomes one ranged reference followed by the item text:
+
+   @lua/plugin.lua#L18-18 local value = build()
+
+An item that names a file without a line becomes a whole-file reference. An
+item without a buffer is a plain text line, for example a header a plugin
+inserted, and it is skipped. An item is also skipped when its buffer has
+unsaved changes, has no file on disk, or is not a normal file buffer. Neovim
+reports how many items it skipped.
+
+Items that repeat one file and line range become one reference, and their
+texts join with `; `. A repeated text is placed once. Items keep list order.
+
+`quickfix.limit` bounds |herdr-context.send_quickfix()| only.
+|herdr-context.send_quickfix_all()| always sends the whole list. A location
+list holds the results of one window, so |herdr-context.send_loclist()| has no
+limit. The operation stops when the list is empty or when no item names a file
+saved on disk.
 
 ==============================================================================
 7. Agent routing                                       *herdr-context-routing*
@@ -320,6 +401,8 @@ The plugin stops before each dependent action:
 - No open buffer saved on disk runs no Herdr command.
 - No diagnostic in the buffer, the selection, or the open files runs no Herdr
   command.
+- An empty quickfix or location list runs no Herdr command.
+- A list without an entry saved on disk runs no Herdr command.
 - An invalid selection in the current buffer runs no Herdr command.
 - Missing Herdr environment values run no Herdr command.
 - An agent-list failure stops routing, placement, and focus.

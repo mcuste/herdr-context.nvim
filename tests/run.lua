@@ -120,6 +120,44 @@ local function sample_diagnostics()
   }
 end
 
+local function with_quickfix(items, body)
+  vim.fn.setqflist(items, 'r')
+
+  local ok, err = xpcall(body, debug.traceback)
+  vim.fn.setqflist({}, 'r')
+  if not ok then error(err, 0) end
+end
+
+local function with_loclist(items, body)
+  vim.fn.setloclist(0, items, 'r')
+
+  local ok, err = xpcall(body, debug.traceback)
+  vim.fn.setloclist(0, {}, 'r')
+  if not ok then error(err, 0) end
+end
+
+local function with_config(config, body)
+  local plugin = require('herdr-context')
+  plugin.setup(config)
+
+  local ok, err = xpcall(body, debug.traceback)
+  plugin.setup()
+  if not ok then error(err, 0) end
+end
+
+local function repository_file(name) return vim.fs.normalize(vim.fn.getcwd() .. '/' .. name) end
+
+local function sample_quickfix()
+  return {
+    { filename = repository_file('README.md'), lnum = 3, col = 1, text = 'first match' },
+    { filename = repository_file('README.md'), lnum = 3, col = 9, text = 'second\n  match' },
+    { filename = repository_file('README.md'), lnum = 3, col = 20, text = 'first match' },
+    { text = 'a header line without a position' },
+    { filename = repository_file('CHANGELOG.md'), lnum = 7, end_lnum = 9, end_col = 0, text = 'block' },
+    { filename = repository_file('CHANGELOG.md'), lnum = 0, text = 'whole file' },
+  }
+end
+
 local function with_ui_select(replacement, body)
   local original = vim.ui.select
   vim.ui.select = replacement
@@ -237,7 +275,7 @@ test('appends diagnostic text after the reference', function()
     start_line = 18,
     end_line = 20,
     range = true,
-    diagnostic = 'ERROR undefined global `value` [lua_ls undefined-global]',
+    note = 'ERROR undefined global `value` [lua_ls undefined-global]',
   }
 
   assert_equal(
@@ -510,7 +548,7 @@ test('builds one context for each diagnostic and none for the file', function()
     assert_equal(contexts[1].file, selection_fixture)
     assert_equal(contexts[1].range, true)
     assert_equal(contexts[1].start_line, 1)
-    assert_equal(contexts[1].diagnostic, 'WARN unused variable [lua_ls]')
+    assert_equal(contexts[1].note, 'WARN unused variable [lua_ls]')
   end)
 end)
 
@@ -534,6 +572,166 @@ test('refuses diagnostics for an empty list and for unsaved changes', function()
     assert_equal(modified, nil)
     assert_equal(modified_error, 'The current buffer has unsaved changes.')
   end)
+end)
+
+test('reads quickfix items and drops entries without a file position', function()
+  local quickfix = require('herdr-context.quickfix')
+
+  with_quickfix(sample_quickfix(), function()
+    local entries, skipped = quickfix.collect('quickfix')
+    assert_equal(skipped, 1)
+    assert_equal(vim.tbl_map(function(entry) return entry.note end, entries), {
+      'first match',
+      'second match',
+      'first match',
+      'block',
+      'whole file',
+    })
+    assert_equal(vim.tbl_map(function(entry) return entry.range end, entries), { true, true, true, true, false })
+    -- A range that ends at column 0 stops before that line.
+    assert_equal({ entries[4].start_line, entries[4].end_line }, { 7, 8 })
+    assert_equal({ entries[5].start_line, entries[5].end_line }, { nil, nil })
+  end)
+end)
+
+test('reads the location list of the current window', function()
+  local quickfix = require('herdr-context.quickfix')
+
+  with_loclist({ { filename = repository_file('README.md'), lnum = 2, text = 'located' } }, function()
+    assert_equal(#quickfix.collect('quickfix'), 0)
+    local entries = quickfix.collect('loclist')
+    assert_equal(#entries, 1)
+    assert_equal(entries[1].note, 'located')
+    assert_equal({ entries[1].start_line, entries[1].end_line }, { 2, 2 })
+  end)
+end)
+
+test('builds one context for each quickfix range and joins repeated ranges', function()
+  local context = require('herdr-context.context')
+
+  with_quickfix(sample_quickfix(), function()
+    local contexts, skipped, total = context.from_quickfix('quickfix')
+    assert_equal(skipped, 1)
+    assert_equal(total, 3)
+    assert_equal(contexts, {
+      {
+        file = repository_file('README.md'),
+        range = true,
+        start_line = 3,
+        end_line = 3,
+        note = 'first match; second match',
+      },
+      { file = repository_file('CHANGELOG.md'), range = true, start_line = 7, end_line = 8, note = 'block' },
+      { file = repository_file('CHANGELOG.md'), range = false, note = 'whole file' },
+    })
+  end)
+  vim.cmd('silent! %bwipeout!')
+end)
+
+test('cuts the quickfix list at the configured limit', function()
+  local context = require('herdr-context.context')
+
+  with_quickfix(sample_quickfix(), function()
+    local contexts, _, total = context.from_quickfix('quickfix', 1)
+    assert_equal(#contexts, 1)
+    assert_equal(total, 3)
+    assert_equal(contexts[1].file, repository_file('README.md'))
+    assert_equal(#context.from_quickfix('quickfix', 0), 3)
+  end)
+  vim.cmd('silent! %bwipeout!')
+end)
+
+test('keeps the last line of a range that ends past column 0', function()
+  local quickfix = require('herdr-context.quickfix')
+
+  with_quickfix({
+    { filename = repository_file('README.md'), lnum = 7, end_lnum = 9, end_col = 12, text = 'span' },
+  }, function()
+    local entries = quickfix.collect('quickfix')
+    assert_equal({ entries[1].start_line, entries[1].end_line }, { 7, 9 })
+  end)
+  vim.cmd('silent! %bwipeout!')
+end)
+
+test('skips a quickfix entry whose buffer was wiped', function()
+  local context = require('herdr-context.context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(repository_file('README.md')))
+
+  vim.fn.setqflist({ { filename = repository_file('README.md'), lnum = 3, text = 'match' } }, 'r')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  vim.cmd('bwipeout! ' .. vim.fn.bufnr(repository_file('README.md')))
+
+  -- Neovim resets the entry to buffer 0, and buffer 0 reads as the current buffer, so the entry
+  -- must be skipped instead of pointing at the file that is open now.
+  local contexts, skipped = context.from_quickfix('quickfix')
+  vim.fn.setqflist({}, 'r')
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(contexts, {})
+  assert_equal(skipped, 1)
+end)
+
+test('keeps one reference for each file that shares a line range', function()
+  local context = require('herdr-context.context')
+
+  with_quickfix({
+    { filename = repository_file('README.md'), lnum = 10, text = 'hit' },
+    { filename = repository_file('CHANGELOG.md'), lnum = 10, text = 'hit' },
+  }, function()
+    local contexts = context.from_quickfix('quickfix')
+    assert_equal(#contexts, 2)
+    assert_equal(vim.tbl_map(function(item) return item.file end, contexts), {
+      repository_file('README.md'),
+      repository_file('CHANGELOG.md'),
+    })
+  end)
+  vim.cmd('silent! %bwipeout!')
+end)
+
+test('joins repeated ranges that other entries separate', function()
+  local context = require('herdr-context.context')
+
+  with_quickfix({
+    { filename = repository_file('README.md'), lnum = 10, text = 'first' },
+    { filename = repository_file('CHANGELOG.md'), lnum = 4, text = 'other' },
+    { filename = repository_file('README.md'), lnum = 10, text = 'second' },
+  }, function()
+    local contexts = context.from_quickfix('quickfix')
+    assert_equal(#contexts, 2)
+    assert_equal(contexts[1].note, 'first; second')
+    assert_equal(contexts[2].note, 'other')
+  end)
+  vim.cmd('silent! %bwipeout!')
+end)
+
+test('leaves an entry without text as a plain reference', function()
+  local context = require('herdr-context.context')
+
+  with_quickfix({ { filename = repository_file('README.md'), lnum = 5, text = '' } }, function()
+    local contexts = context.from_quickfix('quickfix')
+    assert_equal(contexts, { { file = repository_file('README.md'), range = true, start_line = 5, end_line = 5 } })
+  end)
+  vim.cmd('silent! %bwipeout!')
+end)
+
+test('skips a quickfix entry whose buffer has unsaved changes', function()
+  local context = require('herdr-context.context')
+  vim.cmd('silent! %bwipeout!')
+  vim.cmd('edit ' .. vim.fn.fnameescape(selection_fixture))
+  vim.api.nvim_buf_set_lines(0, 0, 1, false, { '# changed' })
+
+  with_quickfix({
+    { filename = selection_fixture, lnum = 1, text = 'unsaved' },
+    { filename = repository_file('README.md'), lnum = 1, text = 'saved' },
+  }, function()
+    local contexts, skipped = context.from_quickfix('quickfix')
+    assert_equal(skipped, 1)
+    assert_equal(#contexts, 1)
+    assert_equal(contexts[1].file, repository_file('README.md'))
+  end)
+  vim.cmd('edit!')
+  vim.cmd('silent! %bwipeout!')
 end)
 
 test('parses a Herdr agent list response into records', function()
@@ -1055,8 +1253,8 @@ test('keeps a file without diagnostics in the all-files list', function()
   assert_equal(reported, 3)
   assert_equal(#contexts, 4)
   assert_equal(contexts[1].range, nil)
-  assert_equal(contexts[1].diagnostic, nil)
-  assert_equal(contexts[2].diagnostic, 'WARN unused variable [lua_ls]')
+  assert_equal(contexts[1].note, nil)
+  assert_equal(contexts[2].note, 'WARN unused variable [lua_ls]')
 end)
 
 test('reports that no open buffer has diagnostics', function()
@@ -1135,6 +1333,149 @@ test('reports a buffer without diagnostics before any Herdr command', function()
   assert_equal(text_called, false)
 end)
 
+test('sends the quickfix list as one reference for each range', function()
+  local plugin = require('herdr-context')
+  plugin.setup()
+  vim.cmd('silent! %bwipeout!')
+
+  local sent
+  with_quickfix(sample_quickfix(), function()
+    with_environment('w1', 't1', function()
+      with_cli_stubs(single_agent_stubs(function(text) sent = text end), plugin.send_quickfix)
+    end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(
+    sent,
+    ' @README.md#L3-3 first match; second match \n @CHANGELOG.md#L7-8 block \n @CHANGELOG.md whole file '
+  )
+end)
+
+test('sends the location list of the current window', function()
+  local plugin = require('herdr-context')
+  plugin.setup()
+  vim.cmd('silent! %bwipeout!')
+
+  local sent
+  with_loclist({ { filename = repository_file('README.md'), lnum = 2, text = 'located' } }, function()
+    with_environment('w1', 't1', function()
+      with_cli_stubs(single_agent_stubs(function(text) sent = text end), plugin.send_loclist)
+    end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(sent, ' @README.md#L2-2 located ')
+end)
+
+test('sends the whole list when the limit is skipped', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+
+  local limited, whole
+  with_config({ quickfix = { limit = 1 } }, function()
+    with_quickfix(sample_quickfix(), function()
+      with_environment('w1', 't1', function()
+        with_cli_stubs(single_agent_stubs(function(text) limited = text end), plugin.send_quickfix)
+        with_cli_stubs(single_agent_stubs(function(text) whole = text end), plugin.send_quickfix_all)
+      end)
+    end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(limited, ' @README.md#L3-3 first match; second match ')
+  assert_equal(
+    whole,
+    ' @README.md#L3-3 first match; second match \n @CHANGELOG.md#L7-8 block \n @CHANGELOG.md whole file '
+  )
+end)
+
+test('sends the whole location list whatever the limit is', function()
+  local plugin = require('herdr-context')
+  vim.cmd('silent! %bwipeout!')
+
+  local sent
+  with_config({ quickfix = { limit = 1 } }, function()
+    with_loclist({
+      { filename = repository_file('README.md'), lnum = 2, text = 'first' },
+      { filename = repository_file('README.md'), lnum = 4, text = 'second' },
+    }, function()
+      with_environment('w1', 't1', function()
+        with_cli_stubs(single_agent_stubs(function(text) sent = text end), plugin.send_loclist)
+      end)
+    end)
+  end)
+  vim.cmd('silent! %bwipeout!')
+
+  assert_equal(sent, ' @README.md#L2-2 first \n @README.md#L4-4 second ')
+end)
+
+test('reports an empty quickfix list and location list', function()
+  local plugin = require('herdr-context')
+  plugin.setup()
+  local text_called = false
+  local stubs = { send_text = function() text_called = true end }
+
+  with_notification_capture(function(notifications)
+    with_environment('w1', 't1', function()
+      with_cli_stubs(stubs, plugin.send_quickfix)
+      with_cli_stubs(stubs, plugin.send_loclist)
+    end)
+
+    assert_equal(#notifications, 2)
+    assert_equal(notifications[1], { message = 'The quickfix list is empty.', level = vim.log.levels.WARN })
+    assert_equal(notifications[2].message, 'The location list is empty.')
+  end)
+
+  assert_equal(text_called, false)
+end)
+
+test('reports a quickfix list without a file saved on disk', function()
+  local plugin = require('herdr-context')
+  plugin.setup()
+  local text_called = false
+  local stubs = { send_text = function() text_called = true end }
+
+  with_notification_capture(function(notifications)
+    with_quickfix({ { text = 'a header line without a position' } }, function()
+      with_environment('w1', 't1', function() with_cli_stubs(stubs, plugin.send_quickfix) end)
+    end)
+
+    assert_equal(#notifications, 1)
+    assert_equal(notifications[1], {
+      message = 'No quickfix entry points at a file saved on disk.',
+      level = vim.log.levels.WARN,
+    })
+  end)
+
+  assert_equal(text_called, false)
+end)
+
+test('reports skipped entries and a cut quickfix list', function()
+  local plugin = require('herdr-context')
+
+  with_notification_capture(function(notifications)
+    with_config({ quickfix = { limit = 1 } }, function()
+      with_quickfix(sample_quickfix(), function()
+        with_environment('w1', 't1', function()
+          with_cli_stubs(single_agent_stubs(function() end), plugin.send_quickfix)
+        end)
+      end)
+    end)
+
+    assert_equal(#notifications, 2)
+    assert_equal(notifications[1], {
+      message = 'Skipped 1 quickfix entry with unsaved changes or no file on disk.',
+      level = vim.log.levels.WARN,
+    })
+    assert_equal(notifications[2], {
+      message = 'Sent the first 1 of 3 references from the quickfix list.',
+      level = vim.log.levels.WARN,
+    })
+  end)
+  vim.cmd('silent! %bwipeout!')
+end)
+
 test('setup creates the command without a default mapping', function()
   local plugin = require('herdr-context')
   plugin.setup()
@@ -1144,6 +1485,14 @@ test('setup creates the command without a default mapping', function()
   assert_equal(plugin.config.mappings.buffers, '')
   assert_equal(plugin.config.mappings.diagnostics, '')
   assert_equal(plugin.config.mappings.buffers_diagnostics, '')
+  assert_equal(vim.fn.exists(':HerdrContextSendQuickfix'), 2)
+  assert_equal(vim.fn.exists(':HerdrContextSendQuickfixAll'), 2)
+  assert_equal(vim.fn.exists(':HerdrContextSendLoclist'), 2)
+  assert_equal(vim.fn.exists(':HerdrContextSendLoclistAll'), 0)
+  assert_equal(plugin.config.mappings.quickfix, '')
+  assert_equal(plugin.config.mappings.quickfix_all, '')
+  assert_equal(plugin.config.mappings.loclist, '')
+  assert_equal(plugin.config.quickfix.limit, 50)
 
   plugin.setup({ mappings = { buffer = '<leader>ac' } })
   assert_equal(plugin.config.mappings.buffer, '<leader>ac')
@@ -1185,6 +1534,22 @@ test('rejects an invalid mapping before replacing configuration', function()
   local ok = pcall(plugin.setup, { mappings = { buffer = false } })
   assert_equal(ok, false)
   assert_equal(plugin.config.mappings.buffer, 'x')
+end)
+
+test('accepts a whole quickfix limit and rejects any other value', function()
+  local plugin = require('herdr-context')
+
+  with_config({ quickfix = { limit = 0 } }, function()
+    assert_equal(plugin.config.quickfix.limit, 0)
+
+    for _, limit in ipairs({ -1, 1.5, '10', false }) do
+      assert_equal(pcall(plugin.setup, { quickfix = { limit = limit } }), false)
+    end
+    assert_equal(pcall(plugin.setup, { quickfix = 'all' }), false)
+    assert_equal(plugin.config.quickfix.limit, 0)
+  end)
+
+  assert_equal(plugin.config.quickfix.limit, 50)
 end)
 
 for _, case in ipairs(tests) do

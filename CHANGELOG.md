@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- `:HerdrContextSendQuickfix` and `send_quickfix()` send one reference for each quickfix entry that
+  names a saved file. `:HerdrContextSendLoclist` and `send_loclist()` send the location list of the
+  current window.
+- `:HerdrContextSendQuickfixAll` and `send_quickfix_all()` send the quickfix list with no limit.
+- `mappings.quickfix`, `mappings.quickfix_all`, and `mappings.loclist` bind the new commands in
+  Normal and Visual mode.
+- `quickfix.limit` bounds `send_quickfix()`. The default is 50, and 0 removes the limit. A location
+  list holds the results of one window, so `send_loclist()` has no limit.
+
 ## [1.3.0] - 2026-08-28
 
 ### Added

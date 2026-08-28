@@ -9,10 +9,10 @@
 
 ![herdr-context.nvim demo](docs/demo/herdr-context-demo.gif)
 
-Send the current file, all open files, a visual selection, or the current diagnostics from Neovim to
-a coding agent in [Herdr](https://herdr.dev/), a terminal workspace for coding agents. One command
-finds the right agent, places the file references in its prompt using the syntax it expects, and
-focuses its pane. You can add to or change the prompt before submitting it.
+Send the current file, all open files, a visual selection, the current diagnostics, or the quickfix
+list from Neovim to a coding agent in [Herdr](https://herdr.dev/), a terminal workspace for coding
+agents. One command finds the right agent, places the file references in its prompt using the syntax
+it expects, and focuses its pane. You can add to or change the prompt before submitting it.
 
 The plugin supports every agent that Herdr detects, and places each reference with the syntax that
 agent expects. It has no Neovim plugin dependencies and works with any `vim.ui.select` provider.
@@ -85,6 +85,14 @@ All open files and their diagnostics. A file without a diagnostic keeps its plai
  @docs/behavior.md
 ```
 
+The quickfix list or the location list. Each entry keeps its own text:
+
+```text
+ @lua/plugin.lua#L18-18 local value = build()
+ @lua/plugin.lua#L31-31 return value
+ @README.md#L3-3 send the value
+```
+
 Three rules cover the rest:
 
 - Save first. A reference points at the file on disk. The plugin refuses or skips a modified buffer.
@@ -118,6 +126,9 @@ Run `:checkhealth herdr-context` after installation to check the first three req
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      quickfix = '<leader>aq',
+      quickfix_all = '<leader>aQ',
+      loclist = '<leader>al',
     },
   },
 }
@@ -138,6 +149,9 @@ later(function()
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      quickfix = '<leader>aq',
+      quickfix_all = '<leader>aQ',
+      loclist = '<leader>al',
     },
   })
 end)
@@ -154,13 +168,16 @@ later(function()
       buffers = '<leader>aA',
       diagnostics = '<leader>ad',
       buffers_diagnostics = '<leader>aD',
+      quickfix = '<leader>aq',
+      quickfix_all = '<leader>aQ',
+      loclist = '<leader>al',
     },
   })
 end)
 ```
 
-The `buffer`, `buffers`, `diagnostics`, and `buffers_diagnostics` mappings apply in both Normal and
-Visual mode. Give each mapping its own keys. No mappings are created unless you configure them.
+All mappings apply in both Normal and Visual mode. Give each mapping its own keys. No mappings are
+created unless you configure them.
 
 ## Commands
 
@@ -170,9 +187,13 @@ Visual mode. Give each mapping its own keys. No mappings are created unless you 
 | `:HerdrContextSendBuffers`            | Normal, Visual | Place a reference to every open file                                   |
 | `:HerdrContextSendDiagnostics`        | Normal, Visual | Place a reference to every diagnostic in the current file or selection |
 | `:HerdrContextSendBuffersDiagnostics` | Normal, Visual | Place a reference to every diagnostic in the open files                |
+| `:HerdrContextSendQuickfix`           | Normal, Visual | Place a reference to each quickfix entry, up to `quickfix.limit`       |
+| `:HerdrContextSendQuickfixAll`        | Normal, Visual | Place a reference to each quickfix entry, with no limit                |
+| `:HerdrContextSendLoclist`            | Normal, Visual | Place a reference to each entry in the window location list            |
 | `:checkhealth herdr-context`          | Any            | Check Neovim, Herdr, and the current Herdr environment                 |
 
-The buffer command accepts the Ex range that Neovim creates after a Visual-mode selection.
+The buffer command accepts the Ex range that Neovim creates after a Visual-mode selection. The list
+commands ignore the range.
 
 ## Reference formats
 
@@ -214,6 +235,8 @@ OMP / Pi:    @lua/plugin.lua#L18-42 ERROR undefined global `value` [lua_ls undef
 Claude Code: @lua/plugin.lua#18-42 ERROR undefined global `value` [lua_ls undefined-global]
 ```
 
+A quickfix entry appends its own text in the same place.
+
 ## Picker
 
 Neovim supplies the default `vim.ui.select` picker. A UI plugin can replace it.
@@ -239,6 +262,12 @@ require('herdr-context').setup({
     buffers = '',
     diagnostics = '',
     buffers_diagnostics = '',
+    quickfix = '',
+    quickfix_all = '',
+    loclist = '',
+  },
+  quickfix = {
+    limit = 50,
   },
 })
 ```
@@ -249,8 +278,16 @@ require('herdr-context').setup({
 | `mappings.buffers`             | Normal, Visual | Disabled | Call `send_buffers()`             |
 | `mappings.diagnostics`         | Normal, Visual | Disabled | Call `send_diagnostics()`         |
 | `mappings.buffers_diagnostics` | Normal, Visual | Disabled | Call `send_buffers_diagnostics()` |
+| `mappings.quickfix`            | Normal, Visual | Disabled | Call `send_quickfix()`            |
+| `mappings.quickfix_all`        | Normal, Visual | Disabled | Call `send_quickfix_all()`        |
+| `mappings.loclist`             | Normal, Visual | Disabled | Call `send_loclist()`             |
+| `quickfix.limit`               | Any            | `50`     | Largest number of list references |
 
-An empty string disables that mapping. Setup always creates all four user commands.
+An empty string disables that mapping. Setup always creates all seven user commands.
+
+`quickfix.limit` applies to `send_quickfix()` only. A longer list is cut, and Neovim reports how
+many references it sent. `0` removes the limit. `send_quickfix_all()` always sends the whole list.
+A location list holds the results of one window, so `send_loclist()` has no limit.
 
 ## Lua API
 
@@ -268,6 +305,9 @@ herdr_context.send_buffer()
 herdr_context.send_buffers()
 herdr_context.send_diagnostics()
 herdr_context.send_buffers_diagnostics()
+herdr_context.send_quickfix()
+herdr_context.send_quickfix_all()
+herdr_context.send_loclist()
 ```
 
 | Function                     | Action                                                                  |
@@ -277,6 +317,9 @@ herdr_context.send_buffers_diagnostics()
 | `send_buffers()`             | Place a reference to every open saved file                              |
 | `send_diagnostics()`         | Place a reference to every diagnostic in the current file or selection  |
 | `send_buffers_diagnostics()` | Place a reference to every diagnostic in the open files                 |
+| `send_quickfix()`            | Place a reference to each quickfix entry, up to `quickfix.limit`        |
+| `send_quickfix_all()`        | Place a reference to each quickfix entry, with no limit                 |
+| `send_loclist()`             | Place a reference to each entry in the window location list             |
 
 ## Failure behavior
 
@@ -287,6 +330,7 @@ The plugin stops before each dependent action when something fails:
 | Missing file, unsaved whole-file input, or unsaved whole lines | No Herdr command runs                                                   |
 | No open buffer saved on disk                                   | No Herdr command runs                                                   |
 | No diagnostic in the current file, selection, or open files    | No Herdr command runs                                                   |
+| Empty list, or no list entry saved on disk                     | No Herdr command runs                                                   |
 | Missing Herdr environment or failed agent list                 | No text is placed                                                       |
 | Failed tab list or cancelled picker                            | No text is placed                                                       |
 | Invalid or blocked target                                      | No text is placed                                                       |

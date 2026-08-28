@@ -11,6 +11,12 @@ M.config = {
     buffers = '',
     diagnostics = '',
     buffers_diagnostics = '',
+    quickfix = '',
+    quickfix_all = '',
+    loclist = '',
+  },
+  quickfix = {
+    limit = 50,
   },
 }
 
@@ -22,15 +28,10 @@ local function config_error(name, value, expected)
   error(string.format('(herdr-context.nvim) `%s` must be %s, not %s', name, expected, type(value)), 0)
 end
 
-local function parse_config(config)
-  if config == nil then return vim.deepcopy(default_config) end
-  if type(config) ~= 'table' then config_error('config', config, 'a table') end
-
-  local mappings = config.mappings
-  if mappings == nil then return vim.deepcopy(default_config) end
+local function parse_mappings(parsed, mappings)
+  if mappings == nil then return end
   if type(mappings) ~= 'table' then config_error('mappings', mappings, 'a table') end
 
-  local parsed = vim.deepcopy(default_config)
   for name in pairs(parsed.mappings) do
     local mapping = mappings[name]
     if mapping ~= nil then
@@ -38,6 +39,27 @@ local function parse_config(config)
       parsed.mappings[name] = mapping
     end
   end
+end
+
+local function parse_quickfix(parsed, quickfix)
+  if quickfix == nil then return end
+  if type(quickfix) ~= 'table' then config_error('quickfix', quickfix, 'a table') end
+
+  local limit = quickfix.limit
+  if limit == nil then return end
+  if type(limit) ~= 'number' or limit < 0 or limit % 1 ~= 0 then
+    config_error('quickfix.limit', limit, 'a whole number of 0 or more')
+  end
+  parsed.quickfix.limit = limit
+end
+
+local function parse_config(config)
+  if config == nil then return vim.deepcopy(default_config) end
+  if type(config) ~= 'table' then config_error('config', config, 'a table') end
+
+  local parsed = vim.deepcopy(default_config)
+  parse_mappings(parsed, config.mappings)
+  parse_quickfix(parsed, config.quickfix)
   return parsed
 end
 
@@ -175,68 +197,81 @@ local function buffer_or_selection(opts)
   return context.from_buffer(0)
 end
 
-local function warn_skipped(skipped)
+local function warn_skipped(skipped, singular, plural)
   if skipped == 0 then return end
 
-  local noun = skipped == 1 and 'buffer' or 'buffers'
+  local noun = skipped == 1 and singular or plural
   notify(string.format('Skipped %d %s with unsaved changes or no file on disk.', skipped, noun), vim.log.levels.WARN)
 end
+
+local list_names = {
+  quickfix = { list = 'quickfix list', entry = 'quickfix entry', entries = 'quickfix entries' },
+  loclist = { list = 'location list', entry = 'location list entry', entries = 'location list entries' },
+}
+
+local function send_list(source, limit)
+  local names = list_names[source]
+  local contexts, skipped, total = context.from_quickfix(source, limit)
+  if #contexts == 0 then
+    if skipped == 0 then
+      notify(string.format('The %s is empty.', names.list), vim.log.levels.WARN)
+    else
+      notify(string.format('No %s points at a file saved on disk.', names.entry), vim.log.levels.WARN)
+    end
+    return
+  end
+
+  warn_skipped(skipped, names.entry, names.entries)
+  if #contexts < total then
+    local message = string.format('Sent the first %d of %d references from the %s.', #contexts, total, names.list)
+    notify(message, vim.log.levels.WARN)
+  end
+
+  send_contexts(contexts)
+end
+
+local commands = {
+  { name = 'HerdrContextSendBuffer', action = 'send_buffer', desc = 'the current file or visual selection' },
+  { name = 'HerdrContextSendBuffers', action = 'send_buffers', desc = 'every open file' },
+  { name = 'HerdrContextSendDiagnostics', action = 'send_diagnostics', desc = 'the current file and its diagnostics' },
+  {
+    name = 'HerdrContextSendBuffersDiagnostics',
+    action = 'send_buffers_diagnostics',
+    desc = 'every open file and its diagnostics',
+  },
+  { name = 'HerdrContextSendQuickfix', action = 'send_quickfix', desc = 'the quickfix list' },
+  { name = 'HerdrContextSendQuickfixAll', action = 'send_quickfix_all', desc = 'the whole quickfix list' },
+  { name = 'HerdrContextSendLoclist', action = 'send_loclist', desc = 'the location list' },
+}
+
+local mappings = {
+  { name = 'buffer', action = 'send_buffer', desc = 'buffer or selection' },
+  { name = 'buffers', action = 'send_buffers', desc = 'all open buffers' },
+  { name = 'diagnostics', action = 'send_diagnostics', desc = 'diagnostics' },
+  { name = 'buffers_diagnostics', action = 'send_buffers_diagnostics', desc = 'all open buffers and diagnostics' },
+  { name = 'quickfix', action = 'send_quickfix', desc = 'quickfix list' },
+  { name = 'quickfix_all', action = 'send_quickfix_all', desc = 'whole quickfix list' },
+  { name = 'loclist', action = 'send_loclist', desc = 'location list' },
+}
 
 function M.setup(config)
   M.config = parse_config(config)
 
-  vim.api.nvim_create_user_command('HerdrContextSendBuffer', M.send_buffer, {
-    desc = 'Send the current file or visual selection to its Herdr agent',
-    force = true,
-    range = true,
-  })
-  vim.api.nvim_create_user_command('HerdrContextSendBuffers', M.send_buffers, {
-    desc = 'Send every open file to its Herdr agent',
-    force = true,
-    range = true,
-  })
-  vim.api.nvim_create_user_command('HerdrContextSendDiagnostics', M.send_diagnostics, {
-    desc = 'Send the current file and its diagnostics to its Herdr agent',
-    force = true,
-    range = true,
-  })
-  vim.api.nvim_create_user_command('HerdrContextSendBuffersDiagnostics', M.send_buffers_diagnostics, {
-    desc = 'Send every open file and its diagnostics to its Herdr agent',
-    force = true,
-    range = true,
-  })
+  for _, command in ipairs(commands) do
+    vim.api.nvim_create_user_command(command.name, function(opts) M[command.action](opts) end, {
+      desc = 'Send ' .. command.desc .. ' to its Herdr agent',
+      force = true,
+      range = true,
+    })
+  end
 
-  if M.config.mappings.buffer ~= '' then
-    vim.keymap.set(
-      { 'n', 'x' },
-      M.config.mappings.buffer,
-      M.send_buffer,
-      { desc = 'Send buffer or selection to Herdr agent' }
-    )
-  end
-  if M.config.mappings.buffers ~= '' then
-    vim.keymap.set(
-      { 'n', 'x' },
-      M.config.mappings.buffers,
-      M.send_buffers,
-      { desc = 'Send all open buffers to Herdr agent' }
-    )
-  end
-  if M.config.mappings.diagnostics ~= '' then
-    vim.keymap.set(
-      { 'n', 'x' },
-      M.config.mappings.diagnostics,
-      M.send_diagnostics,
-      { desc = 'Send diagnostics to Herdr agent' }
-    )
-  end
-  if M.config.mappings.buffers_diagnostics ~= '' then
-    vim.keymap.set(
-      { 'n', 'x' },
-      M.config.mappings.buffers_diagnostics,
-      M.send_buffers_diagnostics,
-      { desc = 'Send all open buffers and diagnostics to Herdr agent' }
-    )
+  for _, mapping in ipairs(mappings) do
+    local keys = M.config.mappings[mapping.name]
+    if keys ~= '' then
+      vim.keymap.set({ 'n', 'x' }, keys, function() M[mapping.action]() end, {
+        desc = 'Send ' .. mapping.desc .. ' to Herdr agent',
+      })
+    end
   end
 end
 
@@ -262,7 +297,7 @@ function M.send_buffers(opts)
     notify('No open buffer is saved on disk.', vim.log.levels.WARN)
     return
   end
-  warn_skipped(skipped)
+  warn_skipped(skipped, 'buffer', 'buffers')
 
   send_contexts(contexts)
 end
@@ -299,9 +334,16 @@ function M.send_buffers_diagnostics(opts)
     notify('No open buffer has diagnostics.', vim.log.levels.WARN)
     return
   end
-  warn_skipped(skipped)
+  warn_skipped(skipped, 'buffer', 'buffers')
 
   send_contexts(contexts)
 end
+
+function M.send_quickfix() send_list('quickfix', M.config.quickfix.limit) end
+
+function M.send_quickfix_all() send_list('quickfix', 0) end
+
+-- A location list holds the results of one window, so it stays under the quickfix limit.
+function M.send_loclist() send_list('loclist', 0) end
 
 return M

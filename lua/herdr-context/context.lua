@@ -1,4 +1,5 @@
 local diagnostics = require('herdr-context.diagnostics')
+local quickfix = require('herdr-context.quickfix')
 
 local M = {}
 
@@ -124,7 +125,7 @@ function M.with_diagnostics(buf, base)
       range = true,
       start_line = item.start_line,
       end_line = item.end_line,
-      diagnostic = item.text,
+      note = item.text,
     })
   end
 
@@ -144,12 +145,73 @@ function M.from_buffers_with_diagnostics(focus)
     end
 
     for _, buffer_diagnostic in ipairs(expanded) do
-      if buffer_diagnostic.diagnostic ~= nil then reported = reported + 1 end
+      if buffer_diagnostic.note ~= nil then reported = reported + 1 end
     end
     vim.list_extend(contexts, expanded)
   end)
 
   return contexts, skipped, reported
+end
+
+-- Entries that repeat one file and line range become a single reference holding their texts.
+local function group_by_range(contexts)
+  local groups = {}
+  local index = {}
+
+  for _, context in ipairs(contexts) do
+    local key = string.format('%s\0%d\0%d', context.file, context.start_line or 0, context.end_line or 0)
+    local group = index[key]
+    if group == nil then
+      group = { context = context, notes = {}, seen = {} }
+      index[key] = group
+      table.insert(groups, group)
+    end
+    if context.note ~= '' and not group.seen[context.note] then
+      group.seen[context.note] = true
+      table.insert(group.notes, context.note)
+    end
+  end
+
+  local grouped = {}
+  for _, group in ipairs(groups) do
+    group.context.note = #group.notes > 0 and table.concat(group.notes, '; ') or nil
+    table.insert(grouped, group.context)
+  end
+
+  return grouped
+end
+
+-- A limit of zero or nil sends the whole list.
+function M.from_quickfix(source, limit)
+  local entries, skipped = quickfix.collect(source)
+  local buffers = {}
+  local contexts = {}
+
+  for _, entry in ipairs(entries) do
+    local buffer_context = buffers[entry.bufnr]
+    if buffer_context == nil then
+      buffer_context = M.from_buffer(entry.bufnr) or false
+      buffers[entry.bufnr] = buffer_context
+    end
+
+    if buffer_context == false then
+      skipped = skipped + 1
+    else
+      table.insert(contexts, {
+        file = buffer_context.file,
+        range = entry.range,
+        start_line = entry.start_line,
+        end_line = entry.end_line,
+        note = entry.note,
+      })
+    end
+  end
+
+  contexts = group_by_range(contexts)
+  local total = #contexts
+  if limit ~= nil and limit > 0 and total > limit then contexts = vim.list_slice(contexts, 1, limit) end
+
+  return contexts, skipped, total
 end
 
 function M.for_agent(context, cwd)

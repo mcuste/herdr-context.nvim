@@ -15,12 +15,12 @@ local function append_selection(prompt, context)
   return string.format('%s\n\n%s%s\n%s\n%s', prompt, fence, context.filetype or '', context.selection, fence)
 end
 
-local function append_diagnostic(prompt, context)
-  if context.diagnostic == nil then return prompt end
-  return string.format('%s%s ', prompt, context.diagnostic)
+local function append_note(prompt, context)
+  if context.note == nil then return prompt end
+  return string.format('%s%s ', prompt, context.note)
 end
 
-local function append_details(prompt, context) return append_selection(append_diagnostic(prompt, context), context) end
+local function append_details(prompt, context) return append_selection(append_note(prompt, context), context) end
 
 local function format_claude_style(context)
   local prompt = context.range

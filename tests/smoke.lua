@@ -213,6 +213,49 @@ with_notifications(function(notifications)
   assert_equal(vim.fn.filereadable(log), 0)
 end)
 
+vim.fn.setqflist({
+  { filename = root .. '/README.md', lnum = 3, col = 1, text = 'first match' },
+  { filename = root .. '/README.md', lnum = 3, col = 9, text = 'second match' },
+  { filename = root .. '/CHANGELOG.md', lnum = 7, text = 'entry' },
+  { text = 'a header line without a position' },
+}, 'r')
+with_notifications(function(notifications)
+  vim.cmd('HerdrContextSendQuickfix')
+  assert_equal(read_calls(3), {
+    'agent|list||',
+    'pane|send-text|smoke:p1|<text>',
+    'agent|focus|smoke:p1|',
+  })
+  assert_equal(read_text(), ' @README.md#L3-3 first match; second match \n @CHANGELOG.md#L7-7 entry ')
+  assert_equal(notifications[1].message, 'Skipped 1 quickfix entry with unsaved changes or no file on disk.')
+end)
+vim.cmd('HerdrContextSendQuickfixAll')
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' @README.md#L3-3 first match; second match \n @CHANGELOG.md#L7-7 entry ')
+vim.fn.setqflist({}, 'r')
+
+vim.fn.setloclist(0, { { filename = root .. '/README.md', lnum = 2, text = 'located' } }, 'r')
+vim.cmd('HerdrContextSendLoclist')
+assert_equal(read_calls(3), {
+  'agent|list||',
+  'pane|send-text|smoke:p1|<text>',
+  'agent|focus|smoke:p1|',
+})
+assert_equal(read_text(), ' @README.md#L2-2 located ')
+vim.fn.setloclist(0, {}, 'r')
+
+with_notifications(function(notifications)
+  vim.cmd('HerdrContextSendQuickfix')
+  assert_equal(notifications[1].message, 'The quickfix list is empty.')
+  vim.cmd('HerdrContextSendLoclist')
+  assert_equal(notifications[2].message, 'The location list is empty.')
+  assert_equal(vim.fn.filereadable(log), 0)
+end)
+
 local labels
 local original_select = vim.ui.select
 vim.ui.select = function(choices, options, callback)

@@ -48,6 +48,32 @@ each file in buffer order. A file with no diagnostic keeps its plain reference, 
 stays complete. A selection in the current buffer limits that file to the selected lines. The
 operation stops when no open file has a diagnostic.
 
+### Quickfix and location lists
+
+`send_quickfix()` reads `getqflist()`. `send_loclist()` reads `getloclist(0)` for the current
+window. Both read the items Neovim stores, never the quickfix window text, so `'errorformat'` and
+`'quickfixtextfunc'` cannot change what the agent receives.
+
+Each item becomes one ranged reference followed by the item text:
+
+```text
+ @lua/plugin.lua#L18-18 local value = build()
+```
+
+- An item without a buffer is a plain text line, for example a header a plugin inserted. It is
+  skipped.
+- An item that names a file without a line becomes a whole-file reference.
+- An item is skipped when its buffer has unsaved changes, has no file on disk, or is not a normal
+  file buffer. This is the rule of `send_buffers()`.
+- Items that repeat one file and line range become one reference. Their texts join with `; `, and a
+  repeated text is placed once.
+- Items keep list order, so the agent reads them in `:cnext` order.
+- Item text is joined into one line, so a reference cannot span two lines.
+- `quickfix.limit` bounds `send_quickfix()` only. A longer list is cut, and the plugin reports how
+  many references it sent. `0` removes the bound, and `send_quickfix_all()` always sends the whole
+  list. A location list holds the results of one window, so `send_loclist()` has no limit.
+- An empty list stops the operation.
+
 ### Visual selection
 
 `send_buffer()` reads characterwise, linewise, and blockwise selections with Neovim's `getregion()`
@@ -194,14 +220,15 @@ the generic text for a range. Gemini CLI and Qwen Code read a path up to the fir
 character, so the plugin escapes those characters with a backslash. Kiro CLI has no `@` syntax, so
 its reference stays plain text that the agent reads itself.
 
-Each diagnostic adds its own line:
+Each diagnostic or quickfix entry adds its own line:
 
 ```text
  @lua/plugin.lua#L18-20 ERROR undefined global `value` [lua_ls undefined-global] 
 ```
 
-The adapter formats the ranged reference. Then come the `vim.diagnostic.severity` name, the message
-joined into one line, and the source and code when Neovim has them.
+The adapter formats the ranged reference. A diagnostic then adds the `vim.diagnostic.severity` name,
+the message joined into one line, and the source and code when Neovim has them. A quickfix entry
+adds its item text instead.
 
 A range that ends at column 0 stops before that line, so the reference ends on the line above.
 
@@ -245,6 +272,8 @@ submits the prompt.
 | Invalid buffer, missing file, or disallowed unsaved changes | Warning | No Herdr command |
 | No open buffer saved on disk | Warning | No Herdr command |
 | No diagnostic in the buffer, the selection, or the open files | Warning | No Herdr command |
+| Empty quickfix or location list | Warning | No Herdr command |
+| No list entry saved on disk | Warning | No Herdr command |
 | Invalid selection in the current buffer | Warning | No Herdr command |
 | Missing workspace or tab environment | Error | No Herdr command |
 | Agent list failure or invalid response | Error | No routing, placement, or focus |
@@ -265,6 +294,8 @@ All messages use `vim.notify` with the title `herdr-context.nvim`.
 - The plugin does not send unlisted, unloaded, or unsaved buffers.
 - The plugin includes source text only for partial-line and block selections.
 - The plugin does not filter diagnostics by severity and does not run a linter.
+- The plugin does not fill, sort, or open the quickfix list. It reads the current list.
+- The plugin does not read the quickfix window text or the list title.
 - The plugin does not start an agent when the workspace has none.
 - The plugin does not submit the target agent's input.
 - The plugin does not select a different workspace.

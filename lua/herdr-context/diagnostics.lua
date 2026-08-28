@@ -1,16 +1,11 @@
+local text = require('herdr-context.text')
+
 local M = {}
 
 local function severity_name(severity)
   local name = vim.diagnostic.severity[severity]
   if type(name) ~= 'string' then return 'UNKNOWN' end
   return name
-end
-
--- Agent input holds one diagnostic per line.
-local function single_line(message)
-  if type(message) ~= 'string' then return '' end
-  local text = message:gsub('%s+', ' ')
-  return vim.trim(text)
 end
 
 local function origin(item)
@@ -34,7 +29,7 @@ local function lines_of(item)
 end
 
 function M.text(item)
-  return string.format('%s %s%s', severity_name(item.severity), single_line(item.message), origin(item))
+  return string.format('%s %s%s', severity_name(item.severity), text.single_line(item.message), origin(item))
 end
 
 function M.collect(buf, first_line, last_line)
