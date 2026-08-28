@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-08-28
+
 ### Changed
 
 - Simplified the README, help, behavior, and development documentation. The install guide now states
