@@ -7,7 +7,7 @@ flow: Context delivery {
   agent: Coding agent
 
   user -> nvim: run mapping or command
-  nvim -> plugin: file, selection, diagnostics, list, or messages
+  nvim -> plugin: Neovim context
   plugin -> herdr: list agents in workspace
   herdr -> plugin: matching agents
   plugin -> user: choose when several match

@@ -9,11 +9,19 @@
 
 ![herdr-context.nvim demo](docs/demo/herdr-context-demo.gif)
 
-Send the current file, all open files, a visual selection, the current diagnostics, a quickfix list,
-or message and notification histories to a coding agent in [Herdr](https://herdr.dev/), a terminal
-workspace for coding agents. One command finds the right agent, places the context in its prompt, and
-focuses its pane. File references use the syntax that the selected agent expects. You can add to or
-change the prompt before submitting it.
+Send context from Neovim to a coding agent in [Herdr](https://herdr.dev/) with one command. It finds the right agent,
+places the context in its prompt, and focuses its pane. When several agents match, it asks you to pick one.
+
+It can send:
+
+- the current file, or a visual selection in it
+- every open buffer
+- the diagnostics of the current file, the selection, or every open file
+- the quickfix list or the location list
+- the message and notification histories
+
+File references use the syntax that the selected agent expects. The plugin never submits the prompt,
+so you can change it first.
 
 The plugin supports every agent that Herdr detects. It has no Neovim plugin dependencies and works
 with any `vim.ui.select` provider.
@@ -103,6 +111,13 @@ Message and notification history:
 build failed
 stack trace
 ```
+
+ mini.notify notifications:
+
+```text
+[WARN]
+build failed
+```
 ````
 
 These rules cover file references:
@@ -114,9 +129,12 @@ These rules cover file references:
   `@/work/project/lua/plugin.lua`. A file outside the agent's directory keeps its full path.
 - No extra file context is added.
 
-The command always reads `:messages`. Active nvim-notify, mini.notify, Snacks.notifier, and
-noice.nvim backends add retained notifications in labelled sections. Every operation leaves the prompt
-unsubmitted.
+The message command sends the complete `:messages` history. It has no limit and reads no selection.
+Active [nvim-notify](https://github.com/rcarriga/nvim-notify),
+[mini.notify](https://github.com/echasnovski/mini.nvim/blob/main/readmes/mini-notify.md),
+[Snacks.notifier](https://github.com/folke/snacks.nvim/blob/main/docs/notifier.md), and
+[noice.nvim](https://github.com/folke/noice.nvim) backends add their retained notifications in
+labelled sections.
 
 [Behavior and routing](docs/behavior.md) has the exact rules for every operation.
 
@@ -195,25 +213,28 @@ later(function()
 end)
 ```
 
-All mappings apply in both Normal and Visual mode. Give each mapping its own keys. No mappings are
-created unless you configure them.
+Each configured mapping works in Normal and Visual mode. Use different keys for each action.
+Mappings with an empty value are not created.
+
+Quickfix sends at most 50 entries by default. Set `quickfix = { limit = 0 }` in `opts` or `setup()`
+to remove the limit.
 
 ## Commands
 
-| Command                               | Mode           | Action                                                                 |
-| ------------------------------------- | -------------- | ---------------------------------------------------------------------- |
-| `:HerdrContextSendBuffer`             | Normal, Visual | Place a reference to the current file or selected range                |
-| `:HerdrContextSendBuffers`            | Normal, Visual | Place a reference to every open file                                   |
-| `:HerdrContextSendDiagnostics`        | Normal, Visual | Place a reference to every diagnostic in the current file or selection |
-| `:HerdrContextSendBuffersDiagnostics` | Normal, Visual | Place a reference to every diagnostic in the open files                |
-| `:HerdrContextSendQuickfix`           | Normal, Visual | Place a reference to each quickfix entry, up to `quickfix.limit`       |
-| `:HerdrContextSendQuickfixAll`        | Normal, Visual | Place a reference to each quickfix entry, with no limit                |
-| `:HerdrContextSendLoclist`            | Normal, Visual | Place a reference to each entry in the window location list            |
-| `:HerdrContextSendMessages`           | Normal, Visual | Place message and notification histories in fenced text blocks         |
-| `:checkhealth herdr-context`          | Any            | Check Neovim, Herdr, and the current Herdr environment                 |
+| Command                               | Selection | Action                                                                 |
+| ------------------------------------- | --------- | ---------------------------------------------------------------------- |
+| `:HerdrContextSendBuffer`             | Used      | Place a reference to the current file or selected range                |
+| `:HerdrContextSendBuffers`            | Used      | Place a reference to every open file                                   |
+| `:HerdrContextSendDiagnostics`        | Used      | Place a reference to every diagnostic in the current file or selection |
+| `:HerdrContextSendBuffersDiagnostics` | Used      | Place a reference to every diagnostic in the open files                |
+| `:HerdrContextSendQuickfix`           | Ignored   | Place a reference to each quickfix entry, up to `quickfix.limit`       |
+| `:HerdrContextSendQuickfixAll`        | Ignored   | Place a reference to each quickfix entry, with no limit                |
+| `:HerdrContextSendLoclist`            | Ignored   | Place a reference to each entry in the window location list            |
+| `:HerdrContextSendMessages`           | Ignored   | Place the complete message and notification histories                  |
+| `:checkhealth herdr-context`          | Ignored   | Check Neovim, Herdr, and the current Herdr environment                 |
 
-The buffer command accepts the Ex range that Neovim creates after a Visual-mode selection. The list
-commands ignore the range.
+Every command runs in Normal and Visual mode. `Selection` says whether the command reads the Visual
+selection, or the Ex range that Neovim creates after leaving Visual mode.
 
 ## Reference formats
 
@@ -282,6 +303,7 @@ require('herdr-context').setup({
     buffers = '',
     diagnostics = '',
     buffers_diagnostics = '',
+    messages = '',
     quickfix = '',
     quickfix_all = '',
     loclist = '',
@@ -298,12 +320,13 @@ require('herdr-context').setup({
 | `mappings.buffers`             | Normal, Visual | Disabled | Call `send_buffers()`             |
 | `mappings.diagnostics`         | Normal, Visual | Disabled | Call `send_diagnostics()`         |
 | `mappings.buffers_diagnostics` | Normal, Visual | Disabled | Call `send_buffers_diagnostics()` |
+| `mappings.messages`            | Normal, Visual | Disabled | Call `send_messages()`            |
 | `mappings.quickfix`            | Normal, Visual | Disabled | Call `send_quickfix()`            |
 | `mappings.quickfix_all`        | Normal, Visual | Disabled | Call `send_quickfix_all()`        |
 | `mappings.loclist`             | Normal, Visual | Disabled | Call `send_loclist()`             |
 | `quickfix.limit`               | Any            | `50`     | Largest number of list references |
 
-An empty string disables that mapping. Setup always creates all seven user commands.
+An empty string disables that mapping. Setup always creates all eight user commands.
 
 `quickfix.limit` applies to `send_quickfix()` only. A longer list is cut, and Neovim reports how
 many references it sent. `0` removes the limit. `send_quickfix_all()` always sends the whole list.
@@ -328,6 +351,7 @@ herdr_context.send_buffers_diagnostics()
 herdr_context.send_quickfix()
 herdr_context.send_quickfix_all()
 herdr_context.send_loclist()
+herdr_context.send_messages()
 ```
 
 | Function                     | Action                                                                  |
@@ -340,6 +364,7 @@ herdr_context.send_loclist()
 | `send_quickfix()`            | Place a reference to each quickfix entry, up to `quickfix.limit`        |
 | `send_quickfix_all()`        | Place a reference to each quickfix entry, with no limit                 |
 | `send_loclist()`             | Place a reference to each entry in the window location list             |
+| `send_messages()`            | Place the complete message and notification histories                   |
 
 ## Failure behavior
 
@@ -351,6 +376,7 @@ The plugin stops before each dependent action when something fails:
 | No open buffer saved on disk                                   | No Herdr command runs                                                   |
 | No diagnostic in the current file, selection, or open files    | No Herdr command runs                                                   |
 | Empty list, or no list entry saved on disk                     | No Herdr command runs                                                   |
+| Empty message and notification history                         | No Herdr command runs                                                   |
 | Missing Herdr environment or failed agent list                 | No text is placed                                                       |
 | Failed tab list or cancelled picker                            | No text is placed                                                       |
 | Invalid or blocked target                                      | No text is placed                                                       |

@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Changed
+
+- Simplified the README, help, behavior, and development documentation. The install guide now states
+  the default quickfix limit, and the message example shows mini.notify output.
+- Updated the context delivery diagram to match the agent selection diagram.
+- Message formatting tests now use the complete collection path. Removed the unused internal
+  `messages.format()` function.
+
 ## [1.4.0] - 2026-08-28
 
 ### Added

@@ -1,108 +1,77 @@
 # Behavior and routing
 
-This document describes exactly what herdr-context.nvim reads, which agent it chooses, what text it
-places, and where each operation stops on failure.
+This page defines what the plugin sends and how it selects an agent.
 
 ![Context delivery sequence](diagrams/context-delivery.svg)
 
 ## Editor input
 
-Every file-based operation requires a normal file buffer with a path that already exists on disk.
-The plugin normalizes the path before it calls Herdr. `send_messages()` does not read a buffer.
+File operations require a normal buffer and a file that exists on disk. The plugin normalizes each
+path before it calls Herdr.
 
-### Whole file
+### Files
 
-`send_buffer()` uses the current file as it exists on disk. It refuses a modified buffer because a
-path reference would point the agent at older content.
-
-### All open files
-
-`send_buffers()` uses every listed buffer that is saved on disk, in buffer order. This includes
-buffers that Neovim has not loaded yet, for example files from the command line or a restored
-session. It skips a buffer that has unsaved changes, has no file, or is not a normal file buffer,
-and warns how many buffers it skipped. It stops when no buffer remains.
-
-The current buffer is the only one that can carry a selection. `send_buffers()` reads the selection
-when it runs in Visual mode or with an Ex range, and then applies the selection rules below to that
-file. It stops and reports the reason when the selection itself is invalid, for example whole lines
-in a modified buffer. Without a selection, the current file sends a whole-file reference like the
-others.
+- `send_buffer()` sends the current file. It refuses unsaved changes because the reference must
+  match the file on disk.
+- `send_buffers()` sends saved, listed file buffers in buffer order. It skips invalid or modified
+  buffers and reports the count. It stops if no valid buffer remains.
+- In Visual mode, the current buffer can include a selection. Other buffers use whole-file
+  references.
 
 ### Diagnostics
 
-`send_diagnostics()` places one line for each diagnostic. It reads them with `vim.diagnostic.get()`,
-so every source that publishes into Neovim counts.
+`send_diagnostics()` reads `vim.diagnostic.get()` and sends one ranged reference per diagnostic.
 
-- Each line is a complete ranged reference. No file reference is placed, and a partial or block
-  selection does not add its fenced text.
-- A selection keeps only the diagnostics whose lines overlap it.
-- Unsaved changes are refused, because a line reference must match the file on disk.
-- No diagnostic stops the operation.
-- Lines are sorted by line, then severity, then message, so the same buffer always sends the same
-  text.
+- A selection keeps diagnostics on overlapping lines.
+- Unsaved changes are refused.
+- Results are sorted by line, severity, and message.
+- No matching diagnostic stops the operation.
 
-### All open files with diagnostics
-
-`send_buffers_diagnostics()` uses the buffer list of `send_buffers()`. It places the diagnostics of
-each file in buffer order. A file with no diagnostic keeps its plain reference, so the file list
-stays complete. A selection in the current buffer limits that file to the selected lines. The
-operation stops when no open file has a diagnostic.
+`send_buffers_diagnostics()` checks every buffer used by `send_buffers()`. Files without diagnostics
+keep a whole-file reference. A selection limits diagnostics in the current buffer.
 
 ### Quickfix and location lists
 
-`send_quickfix()` reads `getqflist()`. `send_loclist()` reads `getloclist(0)` for the current
-window. Both read the items Neovim stores, never the quickfix window text, so `'errorformat'` and
-`'quickfixtextfunc'` cannot change what the agent receives.
+`send_quickfix()` reads `getqflist()`. `send_loclist()` reads `getloclist(0)`. They read list items,
+not quickfix window text.
 
-Each item becomes one ranged reference followed by the item text:
+Each valid item becomes a reference followed by its text:
 
 ```text
  @lua/plugin.lua#L18-18 local value = build()
 ```
 
-- An item without a buffer is a plain text line, for example a header a plugin inserted. It is
-  skipped.
-- An item that names a file without a line becomes a whole-file reference.
-- An item is skipped when its buffer has unsaved changes, has no file on disk, or is not a normal
-  file buffer. This is the rule of `send_buffers()`.
-- Items that repeat one file and line range become one reference. Their texts join with `; `, and a
-  repeated text is placed once.
-- Items keep list order, so the agent reads them in `:cnext` order.
-- Item text is joined into one line, so a reference cannot span two lines.
-- `quickfix.limit` bounds `send_quickfix()` only. A longer list is cut, and the plugin reports how
-  many references it sent. `0` removes the bound, and `send_quickfix_all()` always sends the whole
-  list. A location list holds the results of one window, so `send_loclist()` has no limit.
+- Items without a valid file are skipped.
+- An item without a line becomes a whole-file reference.
+- Duplicate ranges merge their unique text with `; `.
+- Results keep list order.
+- Multiline item text becomes one line.
+- `quickfix.limit` limits `send_quickfix()` to 50 references by default. Use `0` or
+  `send_quickfix_all()` for the full list.
 - An empty list stops the operation.
 
 ### Messages and notifications
 
-`send_messages()` always reads the complete `:messages` history. Active nvim-notify, mini.notify,
-Snacks.notifier, and noice.nvim backends add their retained notifications in separate fenced sections.
-Noice contributes only its `notify` events, so its captured Neovim messages do not repeat the
-`:messages` section. The operation does not require a file buffer and stops before any Herdr command
-when every history is empty.
+`send_messages()` sends the full `:messages` history. Active nvim-notify, mini.notify,
+Snacks.notifier, and noice.nvim backends add their retained notifications in separate sections.
+Noice adds only `notify` events, which avoids duplicate Neovim messages.
 
-### Visual selection
+This operation ignores selections, needs no file buffer, and stops if every history is empty.
 
-`send_buffer()` reads characterwise, linewise, and blockwise selections with Neovim's `getregion()`
-function. The line range is inclusive.
+### Visual selections
 
-The selected shape decides what is placed:
+`send_buffer()` supports characterwise, linewise, and blockwise selections.
 
-| Selection | Text placed | Modified buffer |
+| Selection | Text sent | Modified buffer |
 | --- | --- | --- |
-| Complete lines | Ranged file reference | Refused |
-| Part of one or more lines | Ranged file reference and exact selected text | Allowed |
-| Block selection | Ranged file reference and exact rectangular text | Allowed |
+| Complete lines | Ranged reference | Refused |
+| Partial lines | Ranged reference and selected text | Allowed |
+| Block | Ranged reference and rectangular text | Allowed |
 
-A partial or block selection is appended as a fenced code block. The buffer filetype becomes the
-fence language. If the selected text contains backticks, the plugin uses a longer fence so the
-selection cannot close it.
-
-For example:
+Selected text uses a fenced code block with the buffer filetype:
 
 ````text
- @lua/plugin.lua#L18-20 
+ @lua/plugin.lua#L18-20
 
 ```lua
 local value = build()
@@ -110,90 +79,65 @@ return value
 ```
 ````
 
-The file must still exist on disk when a partial selection comes from a modified buffer. The path
-provides location and the fenced block provides the current text.
-
-When `send_buffer()` receives an Ex range, it uses Neovim's most recent `'<` and `'>` marks. This is
-how `:'<,'>HerdrContextSendBuffer` works after leaving Visual mode.
-
-## Herdr location
-
-The plugin reads two variables set by Herdr:
-
-| Variable | Purpose |
-| --- | --- |
-| `HERDR_WORKSPACE_ID` | Limit candidates to the current workspace |
-| `HERDR_TAB_ID` | Prefer candidates in the current tab |
-
-A missing or empty value stops the operation before the agent list command.
+The file must exist on disk. For a modified buffer, the reference gives the location and the fence
+contains the current text. Ex ranges use the latest `'<` and `'>` marks.
 
 ## Agent routing
 
-The routing rules run in this order:
+The plugin requires `HERDR_WORKSPACE_ID` and `HERDR_TAB_ID`.
 
 1. Run `herdr agent list`.
-2. Keep valid records whose `workspace_id` matches `HERDR_WORKSPACE_ID`.
-3. Use matching records whose `tab_id` matches `HERDR_TAB_ID` when any exist.
-4. Use every matching workspace record when the current tab has no agent.
-5. Select the only remaining agent without opening a picker.
-6. Run `herdr tab list --workspace <workspace-id>` when several agents remain.
-7. Open `vim.ui.select` with the remaining agents.
-8. Validate the selected target before placing text.
+2. Keep agents in the current workspace.
+3. Prefer agents in the current tab.
+4. If the tab has no agent, use all agents in the workspace.
+5. Select the only match directly.
+6. For several matches, run `herdr tab list --workspace <workspace-id>`.
+7. Open `vim.ui.select`.
+8. Reject a blocked agent or one without a pane identifier.
+9. Place the text, then focus the agent.
 
-Current-tab preference is strict. If the current tab contains only a blocked agent, the plugin
-refuses that target. It does not silently route the input to another tab.
+Current-tab preference is strict. A blocked agent in the current tab stops routing instead of sending
+to another tab.
 
-An agent is a valid delivery target only when it has a non-empty pane identifier and is not blocked.
-The pane identifier stays internal. It is passed to Herdr for placement and focus.
+## Picker
 
-## Picker behavior
-
-herdr-context.nvim calls the generic `vim.ui.select` API. Neovim supplies a basic implementation,
-and UI plugins can replace it. There is no code path for a specific picker.
-
-Candidates follow the order returned by `herdr tab list`, then pane identifier order within each tab.
-Each label starts with `[n]` so fuzzy pickers have a stable key to match.
-
-A row can contain:
+The plugin uses `vim.ui.select`, so any compatible UI plugin can replace the default picker.
+Candidates follow Herdr tab order, then pane identifier order. `[n]` gives each row a stable search
+key.
 
 ```text
 [2] ○  Agent: codex  Tab: API  Title: Fix routing  CWD: /work/project
 ```
 
-| Part | Source |
+| Part | Value |
 | --- | --- |
-| `[2]` | Position in the sorted candidate list |
-| `○` | Herdr agent state |
-| `Agent` | `name`, `agent`, or `kind`, in that order |
-| `Tab` | Tab label, tab number, or tab identifier |
-| `Title` | Pane title when Herdr supplies one |
-| `CWD` | Foreground working directory, then agent working directory |
+| `[2]` | Candidate position |
+| `○` | Agent state |
+| `Agent` | `name`, `agent`, or `kind` |
+| `Tab` | Label, number, or identifier |
+| `Title` | Pane title |
+| `CWD` | Foreground directory, then agent directory |
 
-The marker reflects the state reported by Herdr:
+State markers:
 
-| Agent state | Marker |
+| State | Marker |
 | --- | --- |
 | `blocked`, `working`, `done` | `●` |
 | `idle` | `○` |
-| missing or unknown | `·` |
+| Missing or unknown | `·` |
 
-Cancelling the picker stops the operation. No text is placed and no pane is focused.
+Cancelling the picker sends nothing.
 
-## Path selection
+## Paths
 
-The agent's `foreground_cwd` is preferred over its `cwd`. When the current file is below that
-directory, the plugin removes the directory prefix and sends a relative path. It keeps the absolute
-path when the file is outside the agent directory or when Herdr supplies no working directory.
-
-The prefix check uses path boundaries, so `/work/project/file.lua` is not treated as relative to
-`/work/pro`. Windows comparisons ignore path case.
+The plugin uses the agent's `foreground_cwd`, then `cwd`. Files inside that directory use relative
+paths. Other files use absolute paths. Path checks use directory boundaries. Windows checks ignore
+case.
 
 ## Reference formats
 
-The agent `kind` selects an adapter. When `kind` is absent, the plugin uses the `agent` field. An
-unknown or missing value uses the generic format.
-
-For `lua/plugin.lua`:
+The agent `kind` selects the format. If `kind` is missing, the plugin uses `agent`. Unknown values
+use the generic format.
 
 | Adapter | Whole file | Lines 18 through 42 |
 | --- | --- | --- |
@@ -221,92 +165,44 @@ For `lua/plugin.lua`:
 | Qwen Code | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 | Generic | ` @lua/plugin.lua ` | ` @lua/plugin.lua Lines 18-42. ` |
 
-Every reference starts and ends with one space. This prevents a new reference from joining text
-already present in the agent input. Codex paths that contain spaces are enclosed in double quotes.
-Only Claude Code, Kilo Code, OMP, opencode, and Pi have a line range syntax. Every other agent uses
-the generic text for a range. Gemini CLI and Qwen Code read a path up to the first space or shell
-character, so the plugin escapes those characters with a backslash. Kiro CLI has no `@` syntax, so
-its reference stays plain text that the agent reads itself.
+References have surrounding spaces so they do not join existing input. Codex quotes paths with
+spaces. Gemini CLI and Qwen Code escape spaces and shell characters. Kiro CLI uses plain text.
 
-Each diagnostic or quickfix entry adds its own line:
-
-```text
- @lua/plugin.lua#L18-20 ERROR undefined global `value` [lua_ls undefined-global] 
-```
-
-The adapter formats the ranged reference. A diagnostic then adds the `vim.diagnostic.severity` name,
-the message joined into one line, and the source and code when Neovim has them. A quickfix entry
-adds its item text instead.
-
-A range that ends at column 0 stops before that line, so the reference ends on the line above.
-
-Several files are placed as one text. The references use the same adapter and each file starts on
-its own line, so selected text stays with its own reference and a fenced code block cannot swallow
-the next one:
-
-````text
- @README.md#L3-3 
-
-```markdown
-# title
-```
- @lua/plugin.lua 
-````
+Diagnostic references add severity, message, source, and code when available. Quickfix references
+add item text. A range ending at column 0 ends on the previous line.
 
 ## Herdr commands
 
-The plugin starts Herdr with argument arrays through `vim.system`. It does not build shell command
-strings.
-
-A single-agent operation runs:
+The plugin passes argument arrays to `vim.system`. It does not build shell commands.
 
 1. `herdr agent list`
-2. `herdr pane send-text <pane-id> <text>`
-3. `herdr agent focus <pane-id>`
+2. `herdr tab list --workspace <workspace-id>` when a picker is needed
+3. `herdr pane send-text <pane-id> <text>`
+4. `herdr agent focus <pane-id>`
 
-A multiple-agent operation adds this command before the picker:
+Focus runs only after placement succeeds. The plugin does not submit the prompt.
 
-```text
-herdr tab list --workspace <workspace-id>
-```
+## Failures
 
-Focus runs only after text placement succeeds. The plugin uses `pane send-text`, not a command that
-submits the prompt.
+| Failure | Result |
+| --- | --- |
+| Invalid input, empty list, or no matching content | Warning; no Herdr command |
+| Missing Herdr environment | Error; no Herdr command |
+| Agent list failure or invalid response | Error; no routing |
+| No workspace agent | Warning; no placement |
+| Tab list failure or invalid response | Error; no picker |
+| Picker cancelled | No notification; no placement |
+| Invalid target | Error; no placement |
+| Blocked target | Warning; no placement |
+| Placement failure | Error; no focus |
+| Focus failure | Error; placed text remains |
 
-## Failure behavior
+Notifications use `vim.notify` with the title `herdr-context.nvim`.
 
-| Failure point | Notification level | Later actions |
-| --- | --- | --- |
-| Invalid buffer, missing file, or disallowed unsaved changes | Warning | No Herdr command |
-| No open buffer saved on disk | Warning | No Herdr command |
-| No diagnostic in the buffer, the selection, or the open files | Warning | No Herdr command |
-| Empty quickfix or location list | Warning | No Herdr command |
-| Empty message and notification history | Warning | No Herdr command |
-| No list entry saved on disk | Warning | No Herdr command |
-| Invalid selection in the current buffer | Warning | No Herdr command |
-| Missing workspace or tab environment | Error | No Herdr command |
-| Agent list failure or invalid response | Error | No routing, placement, or focus |
-| No agent in the current workspace | Warning | No placement or focus |
-| Tab list failure or invalid response | Error | No picker, placement, or focus |
-| Picker cancellation | None | No placement or focus |
-| Invalid selected target | Error | No placement or focus |
-| Blocked selected target | Warning | No placement or focus |
-| Text placement failure | Error | No focus |
-| Focus failure | Error | Placed text remains in the target input |
+## Limits
 
-All messages use `vim.notify` with the title `herdr-context.nvim`.
-
-## Deliberate limits
-
-- The plugin does not save or modify the current buffer.
-- File operations do not send a full file body. They send a path reference.
-- The plugin does not send unlisted, unloaded, or unsaved buffers.
-- The plugin includes source text only for partial-line and block selections.
-- The plugin does not filter diagnostics by severity and does not run a linter.
-- The plugin does not fill, sort, or open the quickfix list. It reads the current list.
-- The plugin does not read the quickfix window text or the list title.
-- The plugin does not filter, truncate, or clear Neovim's message history.
-- The plugin does not start an agent when the workspace has none.
-- The plugin does not submit the target agent's input.
-- The plugin does not select a different workspace.
-- The plugin does not define a picker UI.
+- The plugin does not save or modify buffers.
+- File operations send references, not full file contents.
+- Only partial-line and block selections include source text.
+- The plugin does not run linters or change Neovim lists and histories.
+- The plugin does not start agents, change workspaces, submit prompts, or define a picker UI.

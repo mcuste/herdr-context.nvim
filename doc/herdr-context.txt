@@ -8,7 +8,7 @@ Contents                                             *herdr-context-contents*
 3. Setup                                            |herdr-context-setup|
 4. Commands                                      |herdr-context-commands|
 5. Lua API                                            |herdr-context-api|
-6. Files, selections, diagnostics, and lists    |herdr-context-selections|
+6. Editor input                                |herdr-context-selections|
 7. Agent routing                                    |herdr-context-routing|
 8. File reference formats                        |herdr-context-formats|
 9. Failure behavior                              |herdr-context-failures|
@@ -18,9 +18,10 @@ Contents                                             *herdr-context-contents*
 1. Overview                                         *herdr-context-overview*
 
 herdr-context.nvim places the current file, every open file, a Visual
-selection, the reported diagnostics, a quickfix list, or Neovim's message
-history in a coding agent's input inside Herdr. It formats file references for
-that agent, focuses the agent, and leaves the text unsubmitted.
+selection, the reported diagnostics, a quickfix or location list, or Neovim's
+message and notification histories in a coding agent's input inside Herdr. It
+formats file references for that agent, focuses the agent, and leaves the text
+unsubmitted.
 
 The plugin prefers agents in the current Herdr tab. It falls back to agents in
 the current workspace and opens |vim.ui.select()| when several agents remain.
@@ -103,7 +104,8 @@ Each mapping applies in Normal mode and Visual mode.
 `mappings.messages` ~
     Normal-mode and Visual-mode mapping for
     |herdr-context.send_messages()|. An empty string disables it. Give it a
-    key of its own, because it applies in both modes.
+    key of its own, because it applies in both modes. It ignores the Visual
+    selection.
 
 `mappings.quickfix` ~
     Normal-mode and Visual-mode mapping for |herdr-context.send_quickfix()|.
@@ -170,13 +172,13 @@ replaces the current configuration.
     window that names a saved file. The range is ignored.
 
                                            *:HerdrContextSendMessages*
-:HerdrContextSendMessages ~
-    Place Neovim's |:messages| history and active supported notification
-    histories in fenced text blocks in a Herdr agent's input. This operation
-    does not require a file buffer.
+:[range]HerdrContextSendMessages ~
+    Place Neovim's complete |:messages| history and the active notification
+    histories in fenced text blocks in a Herdr agent's input. It has no limit.
+    The range is ignored. It does not need a file buffer.
 
-All commands focus the selected agent after successful text placement. They
-never submit the input.
+Every command runs in Normal and Visual mode. All commands focus the selected
+agent after successful text placement. They never submit the input.
 
 ==============================================================================
 5. Lua API                                               *herdr-context-api*
@@ -213,16 +215,15 @@ send_loclist()                       *herdr-context.send_loclist()*
     window that names a saved file.
 
 send_messages()                     *herdr-context.send_messages()*
-    Place Neovim's |:messages| history and active supported notification
-    histories in fenced text blocks. This operation does not require a file
-    buffer.
+    Place Neovim's complete |:messages| history and the active notification
+    histories in fenced text blocks. It has no limit and reads no selection.
+    It does not need a file buffer.
 
 All operations are asynchronous after editor input has been validated.
 Failures are reported through |vim.notify()|.
 
 ==============================================================================
-6. Files, selections, diagnostics, lists, and messages
-                                                   *herdr-context-selections*
+6. Editor input                                   *herdr-context-selections*
 
 Every file-based operation requires a normal file buffer whose path exists on
 disk. |herdr-context.send_messages()| does not read the current buffer.
@@ -326,12 +327,13 @@ saved on disk.
 
 MESSAGES AND NOTIFICATIONS ~
 
-The messages operation reads the complete history shown by |:messages|. When
-active, nvim-notify, mini.notify, Snacks.notifier, and noice.nvim each add
-their retained notifications in a separate fenced `text` block. Noice includes
-only its `notify` events, so entries already read from |:messages| are not
-repeated. A longer fence is used when history contains backticks. The operation
-stops when every history is empty.
+The messages operation reads the complete history shown by |:messages|. It has
+no limit and ignores the Visual selection and the Ex range. When active,
+nvim-notify, mini.notify, Snacks.notifier, and noice.nvim each add their
+retained notifications in a separate fenced `text` block. Noice includes only
+its `notify` events, so entries already read from |:messages| are not
+repeated. A longer fence is used when history contains backticks. The
+operation stops when every history is empty.
 
 ==============================================================================
 7. Agent routing                                       *herdr-context-routing*

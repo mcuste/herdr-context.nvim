@@ -302,22 +302,24 @@ end)
 
 test('formats Neovim message history as fenced agent context', function()
   local messages = require('herdr-context.messages')
-  assert_equal(
-    messages.format('build failed\nstack trace'),
-    ' Neovim messages:\n\n```text\nbuild failed\nstack trace\n``` '
-  )
-  assert_equal(
-    messages.format('message with ``` ticks'),
-    ' Neovim messages:\n\n````text\nmessage with ``` ticks\n```` '
-  )
-  assert_equal(
-    messages.format('message with ```` ticks'),
-    ' Neovim messages:\n\n`````text\nmessage with ```` ticks\n````` '
-  )
+  local cases = {
+    {
+      messages = 'build failed\nstack trace',
+      expected = ' Neovim messages:\n\n```text\nbuild failed\nstack trace\n``` ',
+    },
+    {
+      messages = 'message with ``` ticks',
+      expected = ' Neovim messages:\n\n````text\nmessage with ``` ticks\n```` ',
+    },
+    {
+      messages = 'message with ```` ticks',
+      expected = ' Neovim messages:\n\n`````text\nmessage with ```` ticks\n````` ',
+    },
+  }
 
-  local formatted, format_error = messages.format(' \n')
-  assert_equal(formatted, nil)
-  assert_equal(format_error, "Neovim's message history is empty.")
+  for _, case in ipairs(cases) do
+    with_message_sources({ messages = case.messages }, function() assert_equal(messages.collect(), case.expected) end)
+  end
 end)
 
 test('collects each notification backend independently', function()

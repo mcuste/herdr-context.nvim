@@ -58,12 +58,6 @@ local function add_section(sections, section)
   if section ~= nil then table.insert(sections, section) end
 end
 
-function M.format(history)
-  local formatted = format_section('Neovim messages', history)
-  if formatted == nil then return nil, "Neovim's message history is empty." end
-  return ' ' .. formatted .. ' '
-end
-
 function M.collect()
   local result = vim.api.nvim_exec2('messages', { output = true })
   local history = {}
